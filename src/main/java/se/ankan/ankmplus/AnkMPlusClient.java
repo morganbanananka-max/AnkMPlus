@@ -21,14 +21,14 @@ import net.minecraft.world.phys.EntityHitResult;
 import java.util.UUID;
 
 /**
- * AnkM+ manual restoration of the 8.2 feature set for Fabric 1.21.11.
+ * AnkM+ 8.3: manual-only Mace smashes and two-click shield Stunslam.
  *
  * This mod NEVER sends attack packets. Minecraft's original left-click
  * performs every hit. It merely selects the best hotbar weapon immediately
  * before the player's own click. It does not move the camera, manipulate
  * armor/Elytra, search nearby players, or render a HUD.
  *
- * B: enable/disable manual-click Mace swap.
+ * B: enable/disable Mace selection on REAL smash clicks (fall >1.5 blocks).
  * V: enable/disable shield Stunslam, requiring TWO user clicks.
  */
 public final class AnkMPlusClient implements ClientModInitializer {
@@ -59,7 +59,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
                 InputConstants.KEY_V, category));
 
         ClientTickEvents.END_CLIENT_TICK.register(this::tick);
-        System.out.println("[AnkM+ manual 8.2] loaded: B=Mace on click, V=shield two-click combo");
+        System.out.println("[AnkM+ manual 8.3] loaded: B=real smash only, V=shield axe then mace");
     }
 
     private void tick(Minecraft mc) {
@@ -120,13 +120,13 @@ public final class AnkMPlusClient implements ClientModInitializer {
         }
     }
 
-    private static boolean falling(LocalPlayer p) {
-        return !p.onGround() && (p.fallDistance > 0.30f ||
-                p.isFallFlying() || p.getDeltaMovement().y < -0.08);
+    private static boolean realSmash(LocalPlayer p) {
+        return ManualCombatDecision.realSmash(
+                p.onGround(), p.isFallFlying(), p.fallDistance);
     }
 
     private static int maceSlot(LocalPlayer p) {
-        boolean air = falling(p);
+        boolean air = realSmash(p);
         var registry = p.level().registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
         var density = registry.getOrThrow(Enchantments.DENSITY);
         var breach = registry.getOrThrow(Enchantments.BREACH);
@@ -182,15 +182,21 @@ public final class AnkMPlusClient implements ClientModInitializer {
 
         ManualCombatDecision.Action action = ManualCombatDecision.action(
                 self.maceSwap, self.stunSlam, shieldUp,
-                secondClick, axe >= 0, mace >= 0);
+                secondClick, realSmash(p), axe >= 0, mace >= 0);
 
         if (action == ManualCombatDecision.Action.AXE) {
             self.selectForManualClick(p, axe);
             self.shieldTarget = id;
             self.shieldFirstClickAt = self.ticks;
+            // Keep the combo armed across hotbar restoration and the shield's
+            // disabled animation. The user must click again to swing the Mace.
+            System.out.println("[AnkM+ manual 8.3] Stunslam click 1: Axe");
         } else if (action == ManualCombatDecision.Action.MACE) {
             self.selectForManualClick(p, mace);
-            if (secondClick) self.shieldTarget = null;
+            if (secondClick) {
+                self.shieldTarget = null;
+                System.out.println("[AnkM+ manual 8.3] Stunslam click 2: Mace");
+            }
         } else if (self.shieldTarget != null && !secondClick) {
             self.shieldTarget = null;
         }
