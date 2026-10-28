@@ -47,7 +47,6 @@ public final class AnkMPlusClient implements ClientModInitializer {
 
     private LocalPlayer session;
     private LivingEntity preparedTarget;
-    private int lastAttackFrame;
     private boolean preparedInAir;
     private int acquiredAt;
     private int lastAimedAt;
@@ -343,7 +342,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
             if (tick < axeCooldownUntil) return;
             selectTemporarily(p, mace);
             axeFirst = false;
-        } else if (stunSlam && preparedInAir && playerShielding(target) &&
+        } else if (stunSlam && playerShielding(target) &&
                 axeSlot(p) >= 0 && FlightDecision.shieldComboSafe(p.getDeltaMovement().length())) {
             selectTemporarily(p, axeSlot(p));
             mc.gameMode.attack(p, target);
