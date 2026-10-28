@@ -359,7 +359,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
             int hotbarMenuSlot = 36 + swappedChestplateHotbar;
             if (!matchingItem(p.inventoryMenu.getSlot(hotbarMenuSlot).getItem(), originalElytra))
                 return false;
-            if (!matchingItem(p.getItemBySlot(EquipmentSlot.CHEST), expectedChestplate))
+            if (!p.getItemBySlot(EquipmentSlot.CHEST).is(expectedChestplate.getItem()))
                 return false;
             if (!p.inventoryMenu.getCarried().isEmpty()) return false;
             mc.gameMode.handleInventoryMouseClick(p.inventoryMenu.containerId,
