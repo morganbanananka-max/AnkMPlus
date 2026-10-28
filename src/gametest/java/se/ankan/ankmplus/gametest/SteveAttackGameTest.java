@@ -51,6 +51,12 @@ public final class SteveAttackGameTest implements FabricClientGameTest {
             server.runCommand("summon minecraft:zombie 0 65 2 {NoAI:1b,PersistenceRequired:1b,CustomName:'{\"text\":\"Steve\"}'}");
             ctx.waitTicks(8);
             float initial = ctx.computeOnClient(SteveAttackGameTest::health);
+            // Integrated server chunk/entity replication can take longer on CI.
+            // Do not mislabel slow loading as an AnkM+ attack failure.
+            for (int retry = 0; retry < 60 && initial < 1; retry++) {
+                ctx.waitTick();
+                initial = ctx.computeOnClient(SteveAttackGameTest::health);
+            }
             if (initial < 1) {
                 String debug = ctx.computeOnClient(mc -> {
                     if (mc.player == null || mc.level == null) return "no client world/player";
