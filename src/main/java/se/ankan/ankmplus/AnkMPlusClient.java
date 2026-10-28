@@ -316,7 +316,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
             selectTemporarily(p, mace);
             axeFirst = false;
         } else if (stunSlam && preparedInAir && playerShielding(target) &&
-                axeSlot(p) >= 0 && p.getDeltaMovement().length() < 0.7) {
+                axeSlot(p) >= 0 && FlightDecision.shieldComboSafe(p.getDeltaMovement().length())) {
             selectTemporarily(p, axeSlot(p));
             mc.gameMode.attack(p, target);
             p.swing(InteractionHand.MAIN_HAND);
@@ -397,10 +397,9 @@ public final class AnkMPlusClient implements ClientModInitializer {
             // Retain the target briefly while approaching rapidly.
             if (preparedTarget != null &&
                     preparedTarget.isAlive() &&
-                    tick - lastAimedAt <= 14 &&
-                    tick - acquiredAt <= 38 &&
-                    p.distanceToSqr(preparedTarget) <= 400 &&
-                    !p.onGround()) {
+                    FlightDecision.keepTarget(tick - lastAimedAt,
+                            tick - acquiredAt,
+                            p.distanceToSqr(preparedTarget), !p.onGround())) {
                 attemptAttack(mc);
                 return;
             }
@@ -445,7 +444,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
             double closing = candidate.getBoundingBox().getCenter()
                     .subtract(p.getEyePosition()).dot(p.getLookAngle());
             double speed = p.getDeltaMovement().length();
-            double switchDistance = Math.max(4.0, Math.min(12.0, 2.0 + speed * 3.0));
+            double switchDistance = FlightDecision.elytraRemoveDistance(speed);
             if (closing <= switchDistance) {
                 if (!removeElytra(mc)) {
                     // Don't cancel permanently if the inventory is briefly busy.
