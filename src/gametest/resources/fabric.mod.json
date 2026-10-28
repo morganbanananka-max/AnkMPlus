@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "ankmplus-gametest",
+  "version": "1.0.0",
+  "name": "AnkM+ integration test fixture",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-client-gametest": ["se.ankan.ankmplus.gametest.SteveAttackGameTest"]
+  },
+  "depends": {
+    "ankmplus": "*",
+    "fabric-api": "*"
+  }
+}
