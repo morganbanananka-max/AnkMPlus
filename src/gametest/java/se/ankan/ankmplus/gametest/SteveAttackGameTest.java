@@ -226,7 +226,11 @@ public final class SteveAttackGameTest implements FabricClientGameTest {
             server.runCommand("summon minecraft:zombie 0 65 2 {NoAI:1b,PersistenceRequired:1b,CustomName:'{\"text\":\"Steve\"}'}");
             ctx.waitTicks(12);
             float vanillaMaceBefore = ctx.computeOnClient(SteveAttackGameTest::health);
-            if (vanillaMaceBefore < 1) throw new AssertionError("Unenchanted Mace dummy missing");
+            for (int retry = 0; retry < 80 && vanillaMaceBefore < 1; retry++) {
+                ctx.waitTick();
+                vanillaMaceBefore = ctx.computeOnClient(SteveAttackGameTest::health);
+            }
+            if (vanillaMaceBefore < 1) throw new AssertionError("Unenchanted Mace dummy never synced to client");
             ctx.runOnClient(mc -> { mc.player.setYRot(0); mc.player.setXRot(0); });
             ctx.computeOnClient(mc -> setAutoHit(mc, true));
             ctx.waitTicks(18);
