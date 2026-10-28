@@ -95,7 +95,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
         log("client ready | N auto-hit | B auto-swap | V shield combo");
     }
 
-    private static void log(String s) { System.out.println("[AnkM+ 9.6] " + s); }
+    private static void log(String s) { System.out.println("[AnkM+ 9.6.1] " + s); }
 
     private static boolean airborne(LocalPlayer p) {
         return !p.onGround() && (p.isFallFlying() ||
