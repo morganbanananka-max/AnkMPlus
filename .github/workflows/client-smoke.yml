@@ -37,7 +37,7 @@ jobs:
           set -e
           echo "Client command result: $STATUS (124 is normal test timeout)"
           tail -n 120 client-start.log
-          if grep -q '\[AnkM+ manual 8.2\] client ready' client-start.log; then
+          if grep -q '\[AnkM+ manual 8.2\] loaded:' client-start.log; then
             echo "PASS: Minecraft initialized AnkM+ manual 8.2."
           else
             echo "FAIL: Minecraft did not initialize AnkM+ manual 8.2."
