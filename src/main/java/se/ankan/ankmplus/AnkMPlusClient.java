@@ -29,7 +29,7 @@ import java.util.UUID;
  * armor/Elytra, search nearby players, or render a HUD.
  *
  * B: enable/disable Mace selection on REAL smash clicks (fall >1.5 blocks).
- * V: enable/disable shield Stunslam, requiring TWO user clicks.
+ * V: arm/reset shield Stunslam, requiring TWO user clicks.
  */
 public final class AnkMPlusClient implements ClientModInitializer {
     private static AnkMPlusClient instance;
@@ -65,8 +65,11 @@ public final class AnkMPlusClient implements ClientModInitializer {
     private void tick(Minecraft mc) {
         while (maceSwapKey.consumeClick()) maceSwap = !maceSwap;
         while (stunSlamKey.consumeClick()) {
-            stunSlam = !stunSlam;
-            if (!stunSlam) shieldTarget = null;
+            // Previous versions started enabled, so pressing V to use Stunslam
+            // silently DISABLED it. V now arms/resets the combo instead.
+            stunSlam = true;
+            shieldTarget = null;
+            System.out.println("[AnkM+ manual 8.3] Stunslam armed: aim at raised shield, left-click Axe, left-click Mace");
         }
 
         LocalPlayer p = mc.player;
