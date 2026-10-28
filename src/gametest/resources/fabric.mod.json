@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "ankmplus-manual-tests",
+  "version": "1.0.0",
+  "name": "AnkM+ 8.3 manual click integration tests",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-client-gametest": ["se.ankan.ankmplus.gametest.ManualClickGameTest"]
+  },
+  "depends": {"ankmplus": "*", "fabric-api": "*"}
+}
