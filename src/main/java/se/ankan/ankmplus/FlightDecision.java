@@ -10,7 +10,7 @@ public final class FlightDecision {
     /** Keep Elytra equipped for most of the approach, but budget travel time for the swap. */
     public static double elytraRemoveDistance(double speedPerTick) {
         if (!Double.isFinite(speedPerTick) || speedPerTick < 0) speedPerTick = 0;
-        return Math.max(3.2, Math.min(6.5, 2.5 + speedPerTick * 1.15));
+        // Reserve roughly two client ticks of travel at high speed. At normal\n        // speeds this remains a close-range swap, preserving Elytra momentum.\n        return Math.max(3.2, Math.min(16.0, 2.5 + speedPerTick * 1.8));
     }
 
     /** Maintain a short-lived target even if the camera or flight path shifts for a moment. */
