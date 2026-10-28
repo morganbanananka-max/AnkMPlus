@@ -6,10 +6,10 @@ import static org.junit.jupiter.api.Assertions.*;
 class FlightDecisionTest {
     @Test void elytraNotRemovedThirtyBlocksAway() {
         assertEquals(3.2, FlightDecision.elytraRemoveDistance(0), 0.001);
-        assertEquals(3.2, FlightDecision.elytraRemoveDistance(0.5), 0.001);
-        assertEquals(4.8, FlightDecision.elytraRemoveDistance(2.0), 0.001);
-        assertEquals(6.5, FlightDecision.elytraRemoveDistance(9.0), 0.001);
-        assertEquals(3.2, FlightDecision.elytraRemoveDistance(Double.POSITIVE_INFINITY), 0.001);
+        assertEquals(3.4, FlightDecision.elytraRemoveDistance(0.5), 0.001);
+        assertEquals(6.1, FlightDecision.elytraRemoveDistance(2.0), 0.001);
+        assertEquals(16.0, FlightDecision.elytraRemoveDistance(9.0), 0.001);
+        assertEquals(16.0, FlightDecision.elytraRemoveDistance(20.0), 0.001);\n        assertEquals(3.2, FlightDecision.elytraRemoveDistance(Double.POSITIVE_INFINITY), 0.001);
     }
 
     @Test void preserveTargetDuringFastFlybyButNotForever() {
