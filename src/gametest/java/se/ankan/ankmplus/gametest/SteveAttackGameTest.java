@@ -51,8 +51,21 @@ public final class SteveAttackGameTest implements FabricClientGameTest {
             server.runCommand("summon minecraft:zombie 0 65 2 {NoAI:1b,PersistenceRequired:1b,CustomName:'{\"text\":\"Steve\"}'}");
             ctx.waitTicks(8);
             float initial = ctx.computeOnClient(SteveAttackGameTest::health);
-            if (initial < 1)
-                throw new AssertionError("Steve training zombie did not spawn.");
+            if (initial < 1) {
+                String debug = ctx.computeOnClient(mc -> {
+                    if (mc.player == null || mc.level == null) return "no client world/player";
+                    StringBuilder nearby = new StringBuilder("player=" + mc.player.position());
+                    for (var entity : mc.level.getEntities(mc.player,
+                            mc.player.getBoundingBox().inflate(16.0),
+                            other -> other instanceof LivingEntity)) {
+                        nearby.append(" / ").append(entity.getType()).append(":")
+                                .append(entity.getName().getString())
+                                .append("@").append(entity.position());
+                    }
+                    return nearby.toString();
+                });
+                throw new AssertionError("Steve not visible to client: " + debug);
+            }
 
             // CASE 1: Auto-hit must not attack when the player looks away.
             ctx.waitTicks(15);
