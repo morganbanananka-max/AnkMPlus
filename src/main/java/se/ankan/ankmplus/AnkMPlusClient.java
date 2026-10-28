@@ -183,10 +183,8 @@ public final class AnkMPlusClient implements ClientModInitializer {
             int d = EnchantmentHelper.getItemEnchantmentLevel(density, stack);
             int b = EnchantmentHelper.getItemEnchantmentLevel(breach, stack);
             int w = EnchantmentHelper.getItemEnchantmentLevel(wind, stack);
-            // Ground attacks require Breach, unless the only alternative is a
-            // non-enchanted mace. With no Breach, do not swap the user's item.
-            if (!air && b == 0) continue;
-            int points = air ? 1000 * d + 50 * w + b : 1000 * b + 10 * w;
+            int points = MaceChoice.points(air, d, b, w);
+            if (points == Integer.MIN_VALUE) continue;
             if (slot == p.getInventory().getSelectedSlot()) points++;
             if (points > value) { value = points; chosen = slot; }
         }
@@ -236,12 +234,6 @@ public final class AnkMPlusClient implements ClientModInitializer {
                 p.inventoryMenu.getCarried().isEmpty();
     }
 
-    private static boolean chestplate(ItemStack s) {
-        return s.is(Items.NETHERITE_CHESTPLATE) || s.is(Items.DIAMOND_CHESTPLATE) ||
-                s.is(Items.IRON_CHESTPLATE) || s.is(Items.GOLDEN_CHESTPLATE) ||
-                s.is(Items.CHAINMAIL_CHESTPLATE) || s.is(Items.LEATHER_CHESTPLATE);
-    }
-
     private static int chestplateRank(ItemStack stack) {
         if (stack.is(Items.NETHERITE_CHESTPLATE)) return 6;
         if (stack.is(Items.DIAMOND_CHESTPLATE)) return 5;
@@ -256,6 +248,14 @@ public final class AnkMPlusClient implements ClientModInitializer {
         LocalPlayer p = mc.player;
         mc.gameMode.handleInventoryMouseClick(
                 p.inventoryMenu.containerId, slot, button, type, p);
+    }
+
+    private void executeArmorPlan(Minecraft mc, boolean restoring) {
+        ArmorTransaction.Mode type = ArmorTransaction.Mode.valueOf(armorMode.name());
+        for (ArmorTransaction.Step op : ArmorTransaction.plan(type, storedMenuSlot, restoring)) {
+            click(mc, op.slot(), op.button(),
+                    op.kind() == ArmorTransaction.Kind.SWAP ? ClickType.SWAP : ClickType.PICKUP);
+        }
     }
 
     /** No item is dropped. If there is no safe destination, abort swap. */
@@ -279,7 +279,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
 
         int empty = -1;
         if (chestSource < 0) {
-            for (int i = 9; i <= 35; i++) {
+            for (int i = 9; i <= 44; i++) {
                 if (p.inventoryMenu.getSlot(i).getItem().isEmpty()) {
                     empty = i;
                     break;
@@ -298,18 +298,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
                 : storedHotbar >= 0 ? ArmorMode.HOTBAR_CHESTPLATE
                 : ArmorMode.INVENTORY_CHESTPLATE;
 
-        if (armorMode == ArmorMode.HOTBAR_CHESTPLATE) {
-            click(mc, CHEST_SLOT, storedHotbar, ClickType.SWAP);
-        } else if (armorMode == ArmorMode.INVENTORY_CHESTPLATE) {
-            // Elytra to cursor -> chestplate slot (swap) -> armor chest.
-            click(mc, CHEST_SLOT, 0, ClickType.PICKUP);
-            click(mc, storedMenuSlot, 0, ClickType.PICKUP);
-            click(mc, CHEST_SLOT, 0, ClickType.PICKUP);
-        } else {
-            // Elytra to cursor -> empty inventory slot.
-            click(mc, CHEST_SLOT, 0, ClickType.PICKUP);
-            click(mc, storedMenuSlot, 0, ClickType.PICKUP);
-        }
+        executeArmorPlan(mc, false);
 
         log("chest change " + armorMode + " source=" + storedMenuSlot);
         return true;
@@ -346,19 +335,15 @@ public final class AnkMPlusClient implements ClientModInitializer {
         switch (armorMode) {
             case HOTBAR_CHESTPLATE -> {
                 if (!chest.is(savedChestplate.getItem())) return false;
-                click(mc, CHEST_SLOT, storedHotbar, ClickType.SWAP);
+                executeArmorPlan(mc, true);
             }
             case INVENTORY_CHESTPLATE -> {
                 if (!chest.is(savedChestplate.getItem())) return false;
-                // Elytra from source -> armor (swaps chestplate) -> source.
-                click(mc, storedMenuSlot, 0, ClickType.PICKUP);
-                click(mc, CHEST_SLOT, 0, ClickType.PICKUP);
-                click(mc, storedMenuSlot, 0, ClickType.PICKUP);
+                executeArmorPlan(mc, true);
             }
             case EMPTY_SLOT -> {
                 if (!chest.isEmpty()) return false;
-                click(mc, storedMenuSlot, 0, ClickType.PICKUP);
-                click(mc, CHEST_SLOT, 0, ClickType.PICKUP);
+                executeArmorPlan(mc, true);
             }
             default -> { return false; }
         }
@@ -382,7 +367,8 @@ public final class AnkMPlusClient implements ClientModInitializer {
 
         LivingEntity target = aimedTarget(mc);
         if (target == null) return; // Absolutely NO off-hitbox auto attacks.
-        boolean air = airborne(p) || (armorMode != ArmorMode.NONE && approachAirborne);
+        boolean air = !p.onGround() &&
+                (airborne(p) || (armorMode != ArmorMode.NONE && approachAirborne));
         int mace = maceSlot(p, air);
         if (mace < 0) return;
 
@@ -435,12 +421,14 @@ public final class AnkMPlusClient implements ClientModInitializer {
         LivingEntity hit = mod.aimedTarget(mc);
         if (hit == null) return;
         LocalPlayer p = mc.player;
-        boolean air = airborne(p) || (mod.armorMode != ArmorMode.NONE && mod.approachAirborne);
+        boolean air = !p.onGround() &&
+                (airborne(p) || (mod.armorMode != ArmorMode.NONE && mod.approachAirborne));
         int mace = maceSlot(p, air);
         if (mace < 0) return;
         if (air && p.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA))
             mod.equipChestplateOrRemoveElytra(mc);
         mod.selectForAttack(p, mace);
+        mod.lastHitTick = mod.tick; // Prevent double auto-hit during manual attack.
         mod.restoreHotbarAt = mod.tick + 5;
         mod.restoreAfterTick = mod.tick + 3;
     }
@@ -484,7 +472,8 @@ public final class AnkMPlusClient implements ClientModInitializer {
         // Restore regardless of whether auto-hit is enabled and never
         // overwrite user-modified inventory slots.
         if (armorMode != ArmorMode.NONE && tick >= restoreAfterTick &&
-                (approach == null || !autoHit || tick - lastApproachTick > 5)) {
+                (approach == null || !autoHit || tick - lastApproachTick > 5 ||
+                        tick - lastHitTick >= 2 && tick - lastHitTick < 9)) {
             if (!restoreArmor(mc) && tick - lastRestoreWarningTick >= 60) {
                 log("armor restore pending: inventory busy/changed; items not dropped");
                 lastRestoreWarningTick = tick;
@@ -509,12 +498,14 @@ public final class AnkMPlusClient implements ClientModInitializer {
             approach = candidate;
             approachAirborne = airborne(p);
         }
-        if (airborne(p)) approachAirborne = true;
+        if (p.onGround()) approachAirborne = false;
+        else if (airborne(p)) approachAirborne = true;
         lastApproachTick = tick;
 
         // Equipping while far away loses velocity and causes failed flybys.
         // At most prepare a chest swap close to target.
-        if (approachAirborne && armorMode == ArmorMode.NONE &&
+        if (approachAirborne && tick - lastHitTick >= 9 &&
+                armorMode == ArmorMode.NONE &&
                 p.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA)) {
             double closing = candidate.getBoundingBox().getCenter()
                     .subtract(p.getEyePosition()).dot(p.getLookAngle());
