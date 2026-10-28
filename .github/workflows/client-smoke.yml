@@ -20,7 +20,7 @@ jobs:
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '9.6.1'
+          gradle-version: '9.6.1.1'
       - name: Run Minecraft client in virtual display
         shell: bash
         run: |
@@ -33,10 +33,10 @@ jobs:
           set -e
           echo "Client command result: $STATUS (124 is normal test timeout)"
           tail -n 120 client-start.log
-          if grep -q '\[AnkM+ 9.6\] client ready' client-start.log; then
-            echo "PASS: Minecraft initialized AnkM+ 9.6."
+          if grep -q '\[AnkM+ 9.6.1\] client ready' client-start.log; then
+            echo "PASS: Minecraft initialized AnkM+ 9.6.1."
           else
-            echo "FAIL: Minecraft did not initialize AnkM+ 9.6."
+            echo "FAIL: Minecraft did not initialize AnkM+ 9.6.1."
             exit 1
           fi
       - name: Save client startup logs
