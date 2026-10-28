@@ -57,6 +57,8 @@ public final class AnkMPlusClient implements ClientModInitializer {
     private int lastHitTick = -100;
     private int restoreAfterTick;
     private int lastRestoreWarningTick = -100;
+    private int armorSwapAt = -1;
+    private int armorRetryAfterTick = -1;
     private int shieldFollowupAt = -1;
     private LivingEntity shieldFollowupTarget;
 
@@ -261,7 +263,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
     /** No item is dropped. If there is no safe destination, abort swap. */
     private boolean equipChestplateOrRemoveElytra(Minecraft mc) {
         if (armorMode != ArmorMode.NONE) return true;
-        if (!inventorySafe(mc)) return false;
+        if (tick < armorRetryAfterTick || !inventorySafe(mc)) return false;
         LocalPlayer p = mc.player;
         ItemStack elytra = p.getItemBySlot(EquipmentSlot.CHEST);
         if (!elytra.is(Items.ELYTRA)) return true; // Already wearing chestplate.
@@ -299,6 +301,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
                 : ArmorMode.INVENTORY_CHESTPLATE;
 
         executeArmorPlan(mc, false);
+        armorSwapAt = tick;
 
         log("chest change " + armorMode + " source=" + storedMenuSlot);
         return true;
@@ -315,6 +318,9 @@ public final class AnkMPlusClient implements ClientModInitializer {
         storedHotbar = -1;
         savedElytra = ItemStack.EMPTY;
         savedChestplate = ItemStack.EMPTY;
+        armorSwapAt = -1;
+        // Avoid immediately swapping again after an aborted pass.
+        armorRetryAfterTick = tick + 10;
     }
 
     private boolean restoreArmor(Minecraft mc) {
@@ -473,7 +479,8 @@ public final class AnkMPlusClient implements ClientModInitializer {
         // overwrite user-modified inventory slots.
         if (armorMode != ArmorMode.NONE && tick >= restoreAfterTick &&
                 (approach == null || !autoHit || tick - lastApproachTick > 5 ||
-                        tick - lastHitTick >= 2 && tick - lastHitTick < 9)) {
+                        (tick - lastHitTick >= 2 && tick - lastHitTick < 9) ||
+                        (armorSwapAt >= 0 && tick - armorSwapAt >= 12))) {
             if (!restoreArmor(mc) && tick - lastRestoreWarningTick >= 60) {
                 log("armor restore pending: inventory busy/changed; items not dropped");
                 lastRestoreWarningTick = tick;
