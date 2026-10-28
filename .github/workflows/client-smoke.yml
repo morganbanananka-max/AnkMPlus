@@ -33,10 +33,10 @@ jobs:
           set -e
           echo "Client command result: $STATUS (124 is normal test timeout)"
           tail -n 120 client-start.log
-          if grep -q '\[AnkM+ 9.4\] client ready' client-start.log; then
-            echo "PASS: Minecraft initialized AnkM+ 9.4."
+          if grep -q '\[AnkM+ 9.5\] client ready' client-start.log; then
+            echo "PASS: Minecraft initialized AnkM+ 9.5."
           else
-            echo "FAIL: Minecraft did not initialize AnkM+ 9.4."
+            echo "FAIL: Minecraft did not initialize AnkM+ 9.5."
             exit 1
           fi
       - name: Save client startup logs
