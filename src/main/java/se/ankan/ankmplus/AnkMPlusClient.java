@@ -22,112 +22,178 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.ClipContext;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.Optional;
+import java.util.Locale;
 
 /**
- * AnkM+ 9.5 for Minecraft Java 1.21.11 / Fabric.
- * The mod never moves the camera, cancels normal attacks, displays an overlay,
- * or attacks a hidden target. Preparation searches along the user's OWN aim.
- * Final attacks require normal server reach and line of sight, but forgive small aim errors.
+ * AnkM+ 9.6 / Fabric 1.21.11.
+ * Keeps AUTO-HIT, but NEVER uses a softened hitbox, an aimbot or extended reach.
+ * The camera/look ray must truly intersect an entity's bounding box within
+ * 3.0 blocks with no block between eye and hit point.
+ *
+ * Elytra and chestplate are swapped only when a user-aimed approach is close.
+ * All inventory actions use the normal client game-mode menu packets.
  */
 public final class AnkMPlusClient implements ClientModInitializer {
-    private static final int CHEST_ARMOR_MENU_SLOT = 6;
-    private static final double MAX_REACH = 3.0;
+    private static final double REACH = 3.0;
+    private static final int CHEST_SLOT = 6;
     private static AnkMPlusClient INSTANCE;
 
+    private KeyMapping autoKey;
     private KeyMapping swapKey;
     private KeyMapping stunKey;
-    private KeyMapping automaticKey;
+    private boolean autoHit = true;
     private boolean autoSwap = true;
     private boolean stunSlam = true;
-    private boolean autoAttack = true;
 
     private LocalPlayer session;
-    private LivingEntity preparedTarget;
-    private boolean preparedInAir;
-    private int acquiredAt;
-    private int lastAimedAt;
+    private LivingEntity approach;
+    private boolean approachAirborne;
+    private int lastApproachTick;
     private int tick;
-    private int cooldownTicks;
-    private int rearmTicks;
-    private int axeCooldownUntil;
-    private boolean axeFirst;
-
-    private int previousSlot = -1;
-    private int selectedByMod = -1;
-    private int returnSlotAt;
-
-    private ItemStack originalElytra = ItemStack.EMPTY;
-    private int elytraInventorySlot = -1;
-    private int swappedChestplateHotbar = -1;
-    private ItemStack expectedChestplate = ItemStack.EMPTY;
+    private int lastHitTick = -100;
     private int restoreAfterTick;
+    private int lastRestoreWarningTick = -100;
+    private int shieldFollowupAt = -1;
+    private LivingEntity shieldFollowupTarget;
 
-    public AnkMPlusClient() {
-        INSTANCE = this;
-    }
+    private int priorHotbar = -1;
+    private int modHotbar = -1;
+    private int restoreHotbarAt;
+
+    private enum ArmorMode { NONE, HOTBAR_CHESTPLATE, INVENTORY_CHESTPLATE, EMPTY_SLOT }
+    private ArmorMode armorMode = ArmorMode.NONE;
+    private int storedMenuSlot = -1;
+    private int storedHotbar = -1;
+    private ItemStack savedElytra = ItemStack.EMPTY;
+    private ItemStack savedChestplate = ItemStack.EMPTY;
 
     @Override
     public void onInitializeClient() {
+        INSTANCE = this;
         KeyMapping.Category category = KeyMapping.Category.register(
                 Identifier.fromNamespaceAndPath("ankmplus", "combat"));
+        autoKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                "key.ankmplus.autoattack", InputConstants.Type.KEYSYM,
+                InputConstants.KEY_N, category));
         swapKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
                 "key.ankmplus.swap", InputConstants.Type.KEYSYM,
                 InputConstants.KEY_B, category));
         stunKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
                 "key.ankmplus.stun", InputConstants.Type.KEYSYM,
                 InputConstants.KEY_V, category));
-        automaticKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
-                "key.ankmplus.autoattack", InputConstants.Type.KEYSYM,
-                InputConstants.KEY_N, category));
 
         ClientTickEvents.END_CLIENT_TICK.register(this::tick);
         WorldRenderEvents.AFTER_ENTITIES.register(ctx -> {
-            if (INSTANCE != null) INSTANCE.attemptAttack(Minecraft.getInstance());
+            if (INSTANCE != null) INSTANCE.tryAutoHit(Minecraft.getInstance());
         });
-        log("client ready, B=Mace V=Stunslam N=Autoattack");
+        log("client ready | N auto-hit | B auto-swap | V shield combo");
     }
 
-    private static void log(String text) {
-        System.out.println("[AnkM+ 9.5] " + text);
+    private static void log(String s) { System.out.println("[AnkM+ 9.6] " + s); }
+
+    private static boolean airborne(LocalPlayer p) {
+        return !p.onGround() && (p.isFallFlying() ||
+                p.fallDistance > 0.30f || p.getDeltaMovement().y < -0.08);
     }
 
-    private static boolean falling(LocalPlayer p) {
-        return !p.onGround() &&
-                (p.isFallFlying() || p.fallDistance > 0.30f ||
-                        p.getDeltaMovement().y < -0.08);
+    private static boolean targetAllowed(LocalPlayer self, LivingEntity other) {
+        if (other == self || !other.isAlive() || other.isSpectator()) return false;
+        if (other instanceof Player) return true;
+        String name = other.getName().getString().toLowerCase(Locale.ROOT);
+        return name.equals("steve") || name.contains("dummy") || name.contains("bot");
     }
 
-    private static int preferredMace(LocalPlayer p, boolean airborne) {
-        var ench = p.level().registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
-        var breach = ench.getOrThrow(Enchantments.BREACH);
-        var density = ench.getOrThrow(Enchantments.DENSITY);
-        var burst = ench.getOrThrow(Enchantments.WIND_BURST);
-        int winner = -1;
-        int highest = Integer.MIN_VALUE;
-        for (int slot = 0; slot < 9; slot++) {
-            ItemStack item = p.getInventory().getItem(slot);
-            if (!item.is(Items.MACE)) continue;
-            int b = EnchantmentHelper.getItemEnchantmentLevel(breach, item);
-            int d = EnchantmentHelper.getItemEnchantmentLevel(density, item);
-            int w = EnchantmentHelper.getItemEnchantmentLevel(burst, item);
-            if (!airborne && b == 0) continue;
-            int points = airborne ? d * 1000 + w * 80 + b * 10 : b * 1000 + w * 10;
-            if (slot == p.getInventory().getSelectedSlot()) points += 1;
-            if (points > highest) {
-                highest = points;
-                winner = slot;
+    /**
+     * Strict entity ray. All tests use exact AABB surfaces, zero inflation.
+     * When a block is in front of the hit point the attack is refused.
+     */
+    private LivingEntity aimedTarget(Minecraft mc) {
+        LocalPlayer self = mc.player;
+        if (self == null || mc.level == null) return null;
+
+        Vec3 eye = self.getEyePosition();
+        Vec3 look = self.getLookAngle();
+        LivingEntity best = null;
+        double nearest = Double.POSITIVE_INFINITY;
+
+        for (var candidate : mc.level.getEntities(self, self.getBoundingBox().inflate(4.0),
+                entity -> entity instanceof LivingEntity)) {
+            LivingEntity other = (LivingEntity) candidate;
+            if (!targetAllowed(self, other)) continue;
+            AABB aabb = other.getBoundingBox();
+            double distance = ExactHitGeometry.rayAabbDistance(
+                    eye.x, eye.y, eye.z, look.x, look.y, look.z,
+                    aabb.minX, aabb.minY, aabb.minZ,
+                    aabb.maxX, aabb.maxY, aabb.maxZ, REACH);
+            if (!Double.isFinite(distance) || distance >= nearest) continue;
+            Vec3 hit = eye.add(look.scale(distance));
+            var block = mc.level.clip(new ClipContext(
+                    eye, hit, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, self));
+            if (block.getType() == HitResult.Type.BLOCK &&
+                    block.getLocation().distanceToSqr(eye) <= distance * distance + 1.0e-4)
+                continue;
+            if (!self.hasLineOfSight(other)) continue;
+            best = other;
+            nearest = distance;
+        }
+        return best;
+    }
+
+    /** Only preparation (never attack) may see players further than 3 blocks. */
+    private LivingEntity approachTarget(Minecraft mc) {
+        LocalPlayer p = mc.player;
+        if (p == null || mc.level == null) return null;
+        Vec3 look = p.getLookAngle();
+        Vec3 eye = p.getEyePosition();
+        double velocity = p.getDeltaMovement().length();
+        double distance = Math.max(10, Math.min(28, 10 + velocity * 5));
+        LivingEntity best = null;
+        double bestDistance = Double.POSITIVE_INFINITY;
+        for (var candidate : mc.level.getEntities(p, p.getBoundingBox().inflate(distance),
+                e -> e instanceof LivingEntity)) {
+            LivingEntity other = (LivingEntity) candidate;
+            if (!targetAllowed(p, other)) continue;
+            Vec3 towards = other.getBoundingBox().getCenter().subtract(eye);
+            double forward = towards.dot(look);
+            if (forward <= 0 || forward > distance) continue;
+            // Narrow preparation cone. DOES NOT allow attacking off crosshair.
+            double side = towards.subtract(look.scale(forward)).length();
+            if (side > Math.min(2.0, 0.8 + 0.04 * forward)) continue;
+            if (forward < bestDistance) {
+                bestDistance = forward;
+                best = other;
             }
         }
-        return winner;
+        return best;
+    }
+
+    private static int maceSlot(LocalPlayer p, boolean air) {
+        var enchantments = p.level().registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
+        var density = enchantments.getOrThrow(Enchantments.DENSITY);
+        var breach = enchantments.getOrThrow(Enchantments.BREACH);
+        var wind = enchantments.getOrThrow(Enchantments.WIND_BURST);
+        int chosen = -1, value = Integer.MIN_VALUE;
+        for (int slot = 0; slot < 9; slot++) {
+            ItemStack stack = p.getInventory().getItem(slot);
+            if (!stack.is(Items.MACE)) continue;
+            int d = EnchantmentHelper.getItemEnchantmentLevel(density, stack);
+            int b = EnchantmentHelper.getItemEnchantmentLevel(breach, stack);
+            int w = EnchantmentHelper.getItemEnchantmentLevel(wind, stack);
+            // Ground attacks require Breach, unless the only alternative is a
+            // non-enchanted mace. With no Breach, do not swap the user's item.
+            if (!air && b == 0) continue;
+            int points = air ? 1000 * d + 50 * w + b : 1000 * b + 10 * w;
+            if (slot == p.getInventory().getSelectedSlot()) points++;
+            if (points > value) { value = points; chosen = slot; }
+        }
+        return chosen;
     }
 
     private static int axeSlot(LocalPlayer p) {
-        int selected = p.getInventory().getSelectedSlot();
-        if (p.getInventory().getItem(selected).getItem() instanceof AxeItem) return selected;
         for (int i = 0; i < 9; i++) {
             if (p.getInventory().getItem(i).getItem() instanceof AxeItem) return i;
         }
@@ -135,441 +201,335 @@ public final class AnkMPlusClient implements ClientModInitializer {
     }
 
     private static void select(LocalPlayer p, int slot) {
-        if (slot < 0 || slot >= 9 || p.getInventory().getSelectedSlot() == slot) return;
+        if (slot < 0 || slot > 8 || p.getInventory().getSelectedSlot() == slot) return;
         p.getInventory().setSelectedSlot(slot);
         p.connection.send(new ServerboundSetCarriedItemPacket(slot));
     }
 
-    private void clearHotbar() {
-        previousSlot = -1;
-        selectedByMod = -1;
-        returnSlotAt = 0;
-    }
-
-    private void selectTemporarily(LocalPlayer p, int slot) {
-        if (slot < 0) return;
-        int current = p.getInventory().getSelectedSlot();
-        if (previousSlot >= 0 && current != selectedByMod) clearHotbar();
-        if (previousSlot < 0 && current != slot) previousSlot = current;
+    private void selectForAttack(LocalPlayer p, int slot) {
+        int selected = p.getInventory().getSelectedSlot();
+        // If the user independently changed slot, do not overwrite their
+        // previous choice when it is time to restore.
+        if (priorHotbar >= 0 && selected != modHotbar) {
+            priorHotbar = -1;
+            modHotbar = -1;
+        }
+        if (priorHotbar < 0 && selected != slot) priorHotbar = selected;
         select(p, slot);
-        if (previousSlot >= 0) {
-            selectedByMod = slot;
-            returnSlotAt = tick + 10;
+        if (priorHotbar >= 0) {
+            modHotbar = slot;
+            restoreHotbarAt = tick + 5;
         }
     }
 
-    private void restoreHotbar(LocalPlayer p) {
-        if (previousSlot >= 0 && p.getInventory().getSelectedSlot() == selectedByMod)
-            select(p, previousSlot);
-        clearHotbar();
+    private void restoreHeldItem(LocalPlayer p) {
+        if (priorHotbar >= 0 && p.getInventory().getSelectedSlot() == modHotbar)
+            select(p, priorHotbar);
+        priorHotbar = -1;
+        modHotbar = -1;
     }
 
-    /** Finds PvP targets and named practice dummies, not just Player entities. */
-    private LivingEntity playerInApproachCone(Minecraft mc) {
-        LocalPlayer p = mc.player;
-        if (p == null || mc.level == null) return null;
-        Vec3 eye = p.getEyePosition();
-        Vec3 dir = p.getLookAngle();
-        double speedPerTick = p.getDeltaMovement().length();
-        // Preparation only: detect early, but KEEP the Elytra on until close.
-        double distance = Math.max(12.0, Math.min(32.0, 12.0 + 7.0 * speedPerTick));
-        LivingEntity result = null;
-        double nearest = Double.POSITIVE_INFINITY;
-        for (var entity : mc.level.getEntities(p, p.getBoundingBox().inflate(distance),
-                candidate -> candidate instanceof LivingEntity)) {
-            LivingEntity other = (LivingEntity) entity;
-            if (!validTarget(p, other)) continue;
-            Vec3 relative = other.getBoundingBox().getCenter().subtract(eye);
-            double ahead = relative.dot(dir);
-            if (ahead <= 0 || ahead >= distance) continue;
-            double lateralSquared = Math.max(0, relative.lengthSqr() - ahead * ahead);
-            double permitted = 1.25 + Math.min(2.25, ahead * 0.08);
-            if (lateralSquared > permitted * permitted) continue;
-            if (ahead < nearest) {
-                nearest = ahead;
-                result = other;
-            }
-        }
-        // A close, directly targeted player must be usable even if fast flight
-        // caused the wide approach cone to miss a tick entirely.
-        if (mc.hitResult instanceof EntityHitResult hit &&
-                hit.getEntity() instanceof LivingEntity direct && validTarget(p, direct)) {
-            return direct;
-        }
-        return result;
-    }
-
-    private static boolean validTarget(LocalPlayer p, LivingEntity other) {
-        if (other == p || !other.isAlive() || other.isSpectator()) return false;
-        // Client practice dummies frequently render as Steve but are not Player instances.
-        if (other instanceof Player) return true;
-        String name = other.getName().getString().toLowerCase(java.util.Locale.ROOT);
-        return name.contains("steve") || name.contains("dummy") || name.contains("bot");
-    }
-
-    /**
-     * Real collision-box proximity, not an inflated reach or an aimbot.
-     * We allow a small directional error in a fast flyby and retain vanilla range.
-     */
-    private static double aimScore(LocalPlayer p, LivingEntity other) {
-        Vec3 eye = p.getEyePosition();
-        AABB box = other.getBoundingBox();
-        double x = Math.max(box.minX, Math.min(eye.x, box.maxX));
-        double y = Math.max(box.minY, Math.min(eye.y, box.maxY));
-        double z = Math.max(box.minZ, Math.min(eye.z, box.maxZ));
-        Vec3 toward = new Vec3(x, y, z).subtract(eye);
-        double dist = toward.length();
-        Vec3 focus = dist > 1.0e-5 ? toward : other.getBoundingBox().getCenter().subtract(eye);
-        double len = focus.length();
-        double alignment = len < 1.0e-5 ? 1.0 : focus.dot(p.getLookAngle()) / len;
-        boolean air = falling(p) || p.isFallFlying();
-        if (!HitWindow.allowed(dist, alignment, air)) return Double.POSITIVE_INFINITY;
-        if (!p.hasLineOfSight(other)) return Double.POSITIVE_INFINITY;
-        return HitWindow.score(dist, alignment);
-    }
-
-    private LivingEntity bestImmediateTarget(Minecraft mc) {
-        LocalPlayer p = mc.player;
-        if (p == null || mc.level == null) return null;
-        LivingEntity result = null;
-        double best = Double.POSITIVE_INFINITY;
-        // Favor an actual crosshair target when possible, without depending on it.
-        if (mc.hitResult instanceof EntityHitResult hit &&
-                hit.getEntity() instanceof LivingEntity direct && validTarget(p, direct)) {
-            double score = aimScore(p, direct);
-            if (Double.isFinite(score)) return direct;
-        }
-        for (var entity : mc.level.getEntities(p, p.getBoundingBox().inflate(4.0),
-                candidate -> candidate instanceof LivingEntity)) {
-            LivingEntity other = (LivingEntity) entity;
-            if (!validTarget(p, other)) continue;
-            double score = aimScore(p, other);
-            if (score < best) {
-                result = other;
-                best = score;
-            }
-        }
-        return result;
-    }
-
-    private static double rayDistance(LocalPlayer p, LivingEntity entity) {
-        Vec3 eye = p.getEyePosition();
-        Vec3 end = eye.add(p.getLookAngle().scale(MAX_REACH));
-        AABB bounds = entity.getBoundingBox().inflate(0.05);
-        Optional<Vec3> point = bounds.clip(eye, end);
-        return point.map(eye::distanceTo).orElse(Double.POSITIVE_INFINITY);
-    }
-
-    private static boolean playerShielding(LivingEntity entity) {
-        return entity.isUsingItem() && entity.getUseItem().is(Items.SHIELD);
-    }
-
-    private static boolean matchingItem(ItemStack a, ItemStack b) {
-        return !a.isEmpty() && !b.isEmpty() && ItemStack.isSameItemSameComponents(a, b);
-    }
-
-    private static boolean inventoryReady(Minecraft mc) {
+    private static boolean inventorySafe(Minecraft mc) {
         LocalPlayer p = mc.player;
         return p != null && mc.gameMode != null && mc.screen == null &&
                 p.containerMenu == p.inventoryMenu &&
                 p.inventoryMenu.getCarried().isEmpty();
     }
 
-    private static boolean chestplate(ItemStack item) {
-        return item.is(Items.NETHERITE_CHESTPLATE) ||
-                item.is(Items.DIAMOND_CHESTPLATE) ||
-                item.is(Items.IRON_CHESTPLATE) ||
-                item.is(Items.GOLDEN_CHESTPLATE) ||
-                item.is(Items.CHAINMAIL_CHESTPLATE) ||
-                item.is(Items.LEATHER_CHESTPLATE);
+    private static boolean chestplate(ItemStack s) {
+        return s.is(Items.NETHERITE_CHESTPLATE) || s.is(Items.DIAMOND_CHESTPLATE) ||
+                s.is(Items.IRON_CHESTPLATE) || s.is(Items.GOLDEN_CHESTPLATE) ||
+                s.is(Items.CHAINMAIL_CHESTPLATE) || s.is(Items.LEATHER_CHESTPLATE);
     }
 
-    /** Swap Elytra for a chestplate from the hotbar; otherwise stow it safely. */
-    private boolean removeElytra(Minecraft mc) {
+    private static int chestplateRank(ItemStack stack) {
+        if (stack.is(Items.NETHERITE_CHESTPLATE)) return 6;
+        if (stack.is(Items.DIAMOND_CHESTPLATE)) return 5;
+        if (stack.is(Items.IRON_CHESTPLATE)) return 4;
+        if (stack.is(Items.CHAINMAIL_CHESTPLATE)) return 3;
+        if (stack.is(Items.GOLDEN_CHESTPLATE)) return 2;
+        if (stack.is(Items.LEATHER_CHESTPLATE)) return 1;
+        return 0;
+    }
+
+    private void click(Minecraft mc, int slot, int button, ClickType type) {
         LocalPlayer p = mc.player;
-        if (elytraInventorySlot >= 0) return true;
-        if (!inventoryReady(mc) || p == null ||
-                !p.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA)) return false;
-        // One atomic armor/hotbar SWAP is safer than multi-click inventory
-        // juggling and matches the Netherite Chestplate in the reference video.
-        int armorHotbarSlot = -1;
-        for (int slot = 0; slot < 9; slot++) {
-            if (chestplate(p.getInventory().getItem(slot))) {
-                if (armorHotbarSlot < 0 ||
-                        p.getInventory().getItem(slot).is(Items.NETHERITE_CHESTPLATE))
-                    armorHotbarSlot = slot;
-                if (p.getInventory().getItem(slot).is(Items.NETHERITE_CHESTPLATE)) break;
+        mc.gameMode.handleInventoryMouseClick(
+                p.inventoryMenu.containerId, slot, button, type, p);
+    }
+
+    /** No item is dropped. If there is no safe destination, abort swap. */
+    private boolean equipChestplateOrRemoveElytra(Minecraft mc) {
+        if (armorMode != ArmorMode.NONE) return true;
+        if (!inventorySafe(mc)) return false;
+        LocalPlayer p = mc.player;
+        ItemStack elytra = p.getItemBySlot(EquipmentSlot.CHEST);
+        if (!elytra.is(Items.ELYTRA)) return true; // Already wearing chestplate.
+
+        int chestSource = -1, best = 0;
+        for (int i = 9; i <= 44; i++) {
+            ItemStack stack = p.inventoryMenu.getSlot(i).getItem();
+            int rank = chestplateRank(stack);
+            if (rank > best) {
+                best = rank;
+                chestSource = i;
+                if (rank == 6) break;
             }
         }
-        if (armorHotbarSlot >= 0) {
-            originalElytra = p.getItemBySlot(EquipmentSlot.CHEST).copy();
-            expectedChestplate = p.getInventory().getItem(armorHotbarSlot).copy();
-            swappedChestplateHotbar = armorHotbarSlot;
-            elytraInventorySlot = 36 + armorHotbarSlot;
-            mc.gameMode.handleInventoryMouseClick(
-                    p.inventoryMenu.containerId, CHEST_ARMOR_MENU_SLOT,
-                    armorHotbarSlot, ClickType.SWAP, p);
-            log("Elytra swapped for chestplate; stored in hotbar " + armorHotbarSlot);
-            return true;
-        }
+
         int empty = -1;
-        for (int slot = 9; slot <= 35; slot++) {
-            if (p.inventoryMenu.getSlot(slot).getItem().isEmpty()) {
-                empty = slot;
-                break;
+        if (chestSource < 0) {
+            for (int i = 9; i <= 35; i++) {
+                if (p.inventoryMenu.getSlot(i).getItem().isEmpty()) {
+                    empty = i;
+                    break;
+                }
             }
+            if (empty < 0) return false;
         }
-        if (empty < 0) return false;
-        originalElytra = p.getItemBySlot(EquipmentSlot.CHEST).copy();
-        elytraInventorySlot = empty;
-        int id = p.inventoryMenu.containerId;
-        mc.gameMode.handleInventoryMouseClick(id, CHEST_ARMOR_MENU_SLOT, 0, ClickType.PICKUP, p);
-        mc.gameMode.handleInventoryMouseClick(id, empty, 0, ClickType.PICKUP, p);
-        log("elytra temporarily stored in menu slot " + empty);
+
+        savedElytra = elytra.copy();
+        storedMenuSlot = chestSource >= 0 ? chestSource : empty;
+        storedHotbar = chestSource >= 36 ? chestSource - 36 : -1;
+        savedChestplate = chestSource >= 0
+                ? p.inventoryMenu.getSlot(chestSource).getItem().copy()
+                : ItemStack.EMPTY;
+        armorMode = chestSource < 0 ? ArmorMode.EMPTY_SLOT
+                : storedHotbar >= 0 ? ArmorMode.HOTBAR_CHESTPLATE
+                : ArmorMode.INVENTORY_CHESTPLATE;
+
+        if (armorMode == ArmorMode.HOTBAR_CHESTPLATE) {
+            click(mc, CHEST_SLOT, storedHotbar, ClickType.SWAP);
+        } else if (armorMode == ArmorMode.INVENTORY_CHESTPLATE) {
+            // Elytra to cursor -> chestplate slot (swap) -> armor chest.
+            click(mc, CHEST_SLOT, 0, ClickType.PICKUP);
+            click(mc, storedMenuSlot, 0, ClickType.PICKUP);
+            click(mc, CHEST_SLOT, 0, ClickType.PICKUP);
+        } else {
+            // Elytra to cursor -> empty inventory slot.
+            click(mc, CHEST_SLOT, 0, ClickType.PICKUP);
+            click(mc, storedMenuSlot, 0, ClickType.PICKUP);
+        }
+
+        log("chest change " + armorMode + " source=" + storedMenuSlot);
         return true;
     }
 
-    private int locateElytra(LocalPlayer p) {
-        if (elytraInventorySlot >= 9 && elytraInventorySlot <= 35 &&
-                matchingItem(p.inventoryMenu.getSlot(elytraInventorySlot).getItem(), originalElytra))
-            return elytraInventorySlot;
-        for (int i = 9; i <= 44; i++) {
-            if (matchingItem(p.inventoryMenu.getSlot(i).getItem(), originalElytra)) return i;
-        }
-        return -1;
+    private static boolean same(ItemStack x, ItemStack y) {
+        return !x.isEmpty() && !y.isEmpty() && ItemStack.isSameItemSameComponents(x, y);
     }
 
-    /** Restore SAME Elytra to equipment chest slot, never to an arbitrary slot. */
-    private boolean restoreElytra(Minecraft mc) {
-        if (elytraInventorySlot < 0) return true;
+    /** Confirm actual chest contents before forgetting tracked equipment. */
+    private void clearArmorState() {
+        armorMode = ArmorMode.NONE;
+        storedMenuSlot = -1;
+        storedHotbar = -1;
+        savedElytra = ItemStack.EMPTY;
+        savedChestplate = ItemStack.EMPTY;
+    }
+
+    private boolean restoreArmor(Minecraft mc) {
+        if (armorMode == ArmorMode.NONE) return true;
+        if (!inventorySafe(mc)) return false;
         LocalPlayer p = mc.player;
-        if (p == null || mc.gameMode == null || mc.screen != null ||
-                p.containerMenu != p.inventoryMenu) return false;
-        if (matchingItem(p.getItemBySlot(EquipmentSlot.CHEST), originalElytra)) {
-            elytraInventorySlot = -1;
-            originalElytra = ItemStack.EMPTY;
-            swappedChestplateHotbar = -1;
-            expectedChestplate = ItemStack.EMPTY;
-            log("elytra re-equipped");
+        ItemStack chest = p.getItemBySlot(EquipmentSlot.CHEST);
+        if (same(chest, savedElytra)) {
+            clearArmorState();
+            log("Elytra restored");
             return true;
         }
-        // Put the original Netherite Chestplate back exactly where it came
-        // from, while restoring the original Elytra to the armor slot.
-        if (swappedChestplateHotbar >= 0) {
-            int hotbarMenuSlot = 36 + swappedChestplateHotbar;
-            if (!matchingItem(p.inventoryMenu.getSlot(hotbarMenuSlot).getItem(), originalElytra))
-                return false;
-            if (!p.getItemBySlot(EquipmentSlot.CHEST).is(expectedChestplate.getItem()))
-                return false;
-            if (!p.inventoryMenu.getCarried().isEmpty()) return false;
-            mc.gameMode.handleInventoryMouseClick(p.inventoryMenu.containerId,
-                    CHEST_ARMOR_MENU_SLOT, swappedChestplateHotbar, ClickType.SWAP, p);
-            return matchingItem(p.getItemBySlot(EquipmentSlot.CHEST), originalElytra);
+        if (storedMenuSlot < 9 || storedMenuSlot > 44) return false;
+        // Do not move someone else's item if inventory changed during combat.
+        ItemStack source = p.inventoryMenu.getSlot(storedMenuSlot).getItem();
+        if (!same(source, savedElytra)) return false;
+
+        switch (armorMode) {
+            case HOTBAR_CHESTPLATE -> {
+                if (!chest.is(savedChestplate.getItem())) return false;
+                click(mc, CHEST_SLOT, storedHotbar, ClickType.SWAP);
+            }
+            case INVENTORY_CHESTPLATE -> {
+                if (!chest.is(savedChestplate.getItem())) return false;
+                // Elytra from source -> armor (swaps chestplate) -> source.
+                click(mc, storedMenuSlot, 0, ClickType.PICKUP);
+                click(mc, CHEST_SLOT, 0, ClickType.PICKUP);
+                click(mc, storedMenuSlot, 0, ClickType.PICKUP);
+            }
+            case EMPTY_SLOT -> {
+                if (!chest.isEmpty()) return false;
+                click(mc, storedMenuSlot, 0, ClickType.PICKUP);
+                click(mc, CHEST_SLOT, 0, ClickType.PICKUP);
+            }
+            default -> { return false; }
         }
-        if (!p.getItemBySlot(EquipmentSlot.CHEST).isEmpty()) return false;
-        int id = p.inventoryMenu.containerId;
-        if (!p.inventoryMenu.getCarried().isEmpty()) {
-            if (matchingItem(p.inventoryMenu.getCarried(), originalElytra))
-                mc.gameMode.handleInventoryMouseClick(id, CHEST_ARMOR_MENU_SLOT, 0, ClickType.PICKUP, p);
-            return false;
+        if (same(p.getItemBySlot(EquipmentSlot.CHEST), savedElytra)) {
+            clearArmorState();
+            log("Elytra restored and chestplate returned to original slot");
+            return true;
         }
-        int source = locateElytra(p);
-        if (source < 0) return false;
-        mc.gameMode.handleInventoryMouseClick(id, source, 0, ClickType.PICKUP, p);
-        mc.gameMode.handleInventoryMouseClick(id, CHEST_ARMOR_MENU_SLOT, 0, ClickType.PICKUP, p);
-        return matchingItem(p.getItemBySlot(EquipmentSlot.CHEST), originalElytra);
+        return false;
     }
 
-    private void cancelApproach(String reason) {
-        if (preparedTarget != null)
-            log("approach finished: " + reason + " (" + (tick - acquiredAt) + " ticks)");
-        preparedTarget = null;
-        preparedInAir = false;
-        axeFirst = false;
-        restoreAfterTick = tick + 1;
-        // A miss or brief loss of target must not disable the next flyby.
-        rearmTicks = Math.max(rearmTicks, "attack sent".equals(reason) ? 6 : 0);
-    }
-
-    /** Attack directly when a target reaches the crosshair, even between client ticks. */
-    private void attemptAttack(Minecraft mc) {
+    /**
+     * Precise auto-hit: player provides aim. Every packet is gated by exact
+     * entity ray + block clipping and the player's attack cooldown.
+     */
+    private void tryAutoHit(Minecraft mc) {
         LocalPlayer p = mc.player;
-        if (p == null || mc.level == null || mc.gameMode == null ||
-                mc.screen != null || p.isSpectator() || !autoAttack ||
-                cooldownTicks > 0) return;
+        if (!autoHit || p == null || mc.gameMode == null || mc.screen != null ||
+                p.isSpectator() || p.isDeadOrDying() || mc.level == null ||
+                tick - lastHitTick < 9 || !p.inventoryMenu.getCarried().isEmpty()) return;
 
-        // Do not rely on a single exact crosshair ray in a fast pass.
-        LivingEntity target = bestImmediateTarget(mc);
-        if (target == null) return;
-        if (preparedTarget != target) {
-            preparedTarget = target;
-            preparedInAir = falling(p) || p.isFallFlying();
-            acquiredAt = tick;
-            axeFirst = false;
-        }
-        lastAimedAt = tick;
-        if (rearmTicks > 0) return;
-
-        // The same-frame emergency path is essential for a high-speed flyby.
-        // Packet order: inventory swap, selected hotbar slot, attack.
-        if (p.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA) &&
-                (preparedInAir || p.isFallFlying())) {
-            if (!removeElytra(mc)) return;
-        }
-        if (p.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA) && preparedInAir)
-            return;
-        if (p.getAttackStrengthScale(0f) < (preparedInAir ? 0.70f : 0.92f)) return;
-
-        int mace = preferredMace(p, preparedInAir);
+        LivingEntity target = aimedTarget(mc);
+        if (target == null) return; // Absolutely NO off-hitbox auto attacks.
+        boolean air = airborne(p) || (armorMode != ArmorMode.NONE && approachAirborne);
+        int mace = maceSlot(p, air);
         if (mace < 0) return;
 
-        if (axeFirst) {
-            if (tick < axeCooldownUntil) return;
-            selectTemporarily(p, mace);
-            axeFirst = false;
-        } else if (stunSlam && playerShielding(target) &&
-                axeSlot(p) >= 0 && FlightDecision.shieldComboSafe(p.getDeltaMovement().length())) {
-            selectTemporarily(p, axeSlot(p));
-            mc.gameMode.attack(p, target);
-            p.swing(InteractionHand.MAIN_HAND);
-            axeFirst = true;
-            axeCooldownUntil = tick + 8;
-            cooldownTicks = 1;
-            log("shield axe strike");
-            return;
-        } else {
-            if (autoSwap) selectTemporarily(p, mace);
-            else if (p.getInventory().getSelectedSlot() != mace) return;
+        // Elytra armor packets and held-item packet are ordered ahead of attack.
+        if (air && p.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA)) {
+            if (!equipChestplateOrRemoveElytra(mc)) return;
         }
+
+        // At high speed the shield axe -> mace combo misses; avoid it.
+        if (stunSlam && target.isUsingItem() && target.getUseItem().is(Items.SHIELD)
+                && !air && FlightDecision.shieldComboSafe(p.getDeltaMovement().length())) {
+            int axe = axeSlot(p);
+            if (axe >= 0 && shieldFollowupAt < 0) {
+                if (p.getAttackStrengthScale(0) < 0.93f) return;
+                selectForAttack(p, axe);
+                mc.gameMode.attack(p, target);
+                p.swing(InteractionHand.MAIN_HAND);
+                lastHitTick = tick;
+                shieldFollowupTarget = target;
+                shieldFollowupAt = tick + 9;
+                restoreAfterTick = tick + 12;
+                log("shield combo axe packet: " + target.getName().getString());
+                return;
+            }
+        }
+
+        if (shieldFollowupAt >= 0 && shieldFollowupTarget == target &&
+                tick < shieldFollowupAt) return;
+
+        if (autoSwap) selectForAttack(p, mace);
         if (p.getInventory().getSelectedSlot() != mace) return;
+        if (p.getAttackStrengthScale(0f) < 0.90f) return;
+
         mc.gameMode.attack(p, target);
         p.swing(InteractionHand.MAIN_HAND);
-        cooldownTicks = 12;
-        log("mace attack packet sent to " + target.getName().getString());
-        cancelApproach("attack sent");
+        lastHitTick = tick;
+        shieldFollowupTarget = null;
+        shieldFollowupAt = -1;
+        restoreAfterTick = tick + 2;
+        restoreHotbarAt = tick + 4;
+        approach = null;  // Allow armor to be restored even when still close.
+        log("Mace attack PACKET (not confirmed hit): " + target.getName().getString());
     }
 
-    /** Manual clicks are never cancelled; this only picks a Mace beforehand. */
+    /** Never cancel vanilla left-click; select a legitimate Mace before it. */
     public static void beforeManualClick(Minecraft mc) {
-        AnkMPlusClient self = INSTANCE;
-        if (self == null || !self.autoSwap) return;
+        AnkMPlusClient mod = INSTANCE;
+        if (mod == null || !mod.autoSwap || mc.player == null || mc.level == null ||
+                mc.screen != null || mc.gameMode == null) return;
+        LivingEntity hit = mod.aimedTarget(mc);
+        if (hit == null) return;
         LocalPlayer p = mc.player;
-        if (p == null || mc.level == null || mc.gameMode == null ||
-                mc.screen != null || p.isSpectator()) return;
-        if (!(mc.hitResult instanceof EntityHitResult hit) ||
-                !(hit.getEntity() instanceof LivingEntity)) return;
-        int mace = preferredMace(p, falling(p) || (self.preparedInAir && self.elytraInventorySlot >= 0));
-        if (mace >= 0) self.selectTemporarily(p, mace);
+        boolean air = airborne(p) || (mod.armorMode != ArmorMode.NONE && mod.approachAirborne);
+        int mace = maceSlot(p, air);
+        if (mace < 0) return;
+        if (air && p.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA))
+            mod.equipChestplateOrRemoveElytra(mc);
+        mod.selectForAttack(p, mace);
+        mod.restoreHotbarAt = mod.tick + 5;
+        mod.restoreAfterTick = mod.tick + 3;
     }
 
     private void tick(Minecraft mc) {
-        while (swapKey.consumeClick()) autoSwap = !autoSwap;
-        while (stunKey.consumeClick()) stunSlam = !stunSlam;
-        while (automaticKey.consumeClick()) autoAttack = !autoAttack;
+        while (autoKey.consumeClick()) { autoHit = !autoHit; log("auto-hit=" + autoHit); }
+        while (swapKey.consumeClick()) { autoSwap = !autoSwap; log("auto-swap=" + autoSwap); }
+        while (stunKey.consumeClick()) { stunSlam = !stunSlam; log("stunslam=" + stunSlam); }
 
         LocalPlayer p = mc.player;
         if (p == null || mc.level == null || p.isDeadOrDying()) {
             session = p;
-            preparedTarget = null;
-            preparedInAir = false;
-            axeFirst = false;
-            clearHotbar();
-            return; // Remember saved Elytra so a later rejoin can try to recover it.
+            approach = null;
+            shieldFollowupAt = -1;
+            // Tracked items remain intact: do not drop inventory on disconnect.
+            priorHotbar = -1;
+            modHotbar = -1;
+            return;
         }
         if (session != p) {
             session = p;
-            preparedTarget = null;
-            preparedInAir = false;
-            axeFirst = false;
-            clearHotbar();
+            approach = null;
+            shieldFollowupAt = -1;
+            priorHotbar = -1;
+            modHotbar = -1;
+            // World change invalidates references to prior inventory.
+            // Only restore if the actual tracked Elytra can be identified.
             restoreAfterTick = tick;
         }
+
         tick++;
-        if (cooldownTicks > 0) cooldownTicks--;
-        if (rearmTicks > 0) rearmTicks--;
 
-        if (previousSlot >= 0) {
-            if (p.getInventory().getSelectedSlot() != selectedByMod) clearHotbar();
-            else if (preparedTarget == null && tick >= returnSlotAt) restoreHotbar(p);
+        if (priorHotbar >= 0 && p.getInventory().getSelectedSlot() != modHotbar) {
+            priorHotbar = -1; // User chose their own slot.
+            modHotbar = -1;
+        } else if (priorHotbar >= 0 && tick >= restoreHotbarAt &&
+                tick - lastHitTick >= 2) {
+            restoreHeldItem(p);
         }
 
-        if (elytraInventorySlot >= 0 && preparedTarget == null &&
-                tick >= restoreAfterTick) {
-            if (!restoreElytra(mc)) restoreAfterTick = tick + 4;
-        }
-
-        if (mc.gameMode == null || mc.screen != null || p.isSpectator() ||
-                !autoAttack || rearmTicks > 0) {
-            if (preparedTarget != null) cancelApproach("inactive");
-            return;
-        }
-
-        LivingEntity candidate = playerInApproachCone(mc);
-        if (candidate == null) {
-            // Retain the target briefly while approaching rapidly.
-            if (preparedTarget != null &&
-                    preparedTarget.isAlive() &&
-                    FlightDecision.keepTarget(tick - lastAimedAt,
-                            tick - acquiredAt,
-                            p.distanceToSqr(preparedTarget), !p.onGround())) {
-                attemptAttack(mc);
-                return;
+        // Restore regardless of whether auto-hit is enabled and never
+        // overwrite user-modified inventory slots.
+        if (armorMode != ArmorMode.NONE && tick >= restoreAfterTick &&
+                (approach == null || !autoHit || tick - lastApproachTick > 5)) {
+            if (!restoreArmor(mc) && tick - lastRestoreWarningTick >= 60) {
+                log("armor restore pending: inventory busy/changed; items not dropped");
+                lastRestoreWarningTick = tick;
             }
-            if (preparedTarget != null) cancelApproach("lost target");
+        }
+
+        if (!autoHit || !autoSwap || mc.gameMode == null || mc.screen != null ||
+                p.isSpectator()) {
+            approach = null;
             return;
         }
 
-        if (preparedTarget != null && preparedTarget != candidate &&
-                elytraInventorySlot >= 0) {
-            cancelApproach("different target");
+        LivingEntity candidate = approachTarget(mc);
+        if (candidate == null) {
+            if (approach != null && tick - lastApproachTick > 4) {
+                approach = null;
+                restoreAfterTick = tick;
+            }
             return;
         }
-        if (preparedTarget != candidate) {
-            preparedTarget = candidate;
-            preparedInAir = falling(p);
-            acquiredAt = tick;
-            axeFirst = false;
-            log("preparing " + candidate.getName().getString() +
-                    ", airborne=" + preparedInAir);
+        if (candidate != approach) {
+            approach = candidate;
+            approachAirborne = airborne(p);
         }
-        lastAimedAt = tick;
-        // If the player takes off while already approaching, keep the same
-        // target but upgrade the plan to an airborne smash.
-        if (falling(p)) preparedInAir = true;
+        if (airborne(p)) approachAirborne = true;
+        lastApproachTick = tick;
 
-        int mace = preferredMace(p, preparedInAir);
-        if (mace < 0) {
-            cancelApproach("missing suitable Mace");
-            return;
-        }
-
-        if (elytraInventorySlot >= 0 &&
+        // Equipping while far away loses velocity and causes failed flybys.
+        // At most prepare a chest swap close to target.
+        if (approachAirborne && armorMode == ArmorMode.NONE &&
                 p.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA)) {
-            // Pending inventory packet: never send a flying Mace attack yet.
-            return;
-        }
-
-        if (preparedInAir && p.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA)) {
-            // Removing Elytra 20-30 blocks out kills gliding momentum and was
-            // the main reason previous builds never reached the opponent.
-            // Allow up to ~3 ticks for the inventory transaction at high speed.
             double closing = candidate.getBoundingBox().getCenter()
                     .subtract(p.getEyePosition()).dot(p.getLookAngle());
-            double speed = p.getDeltaMovement().length();
-            double switchDistance = FlightDecision.elytraRemoveDistance(speed);
-            if (closing <= switchDistance) {
-                if (!removeElytra(mc)) {
-                    // A busy inventory should not disable ordinary attacks.
-                    return;
-                }
+            if (closing > 0 &&
+                    closing <= FlightDecision.elytraRemoveDistance(
+                            p.getDeltaMovement().length())) {
+                if (equipChestplateOrRemoveElytra(mc)) restoreAfterTick = tick + 8;
             }
         }
-        // Do not switch away from a firework rocket 20+ blocks out.
-        // The same-frame hit path selects Mace when the hitbox enters reach.
-        double distanceSq = p.distanceToSqr(candidate);
-        if (autoSwap && distanceSq <= 36.0 && !(axeFirst && tick < axeCooldownUntil))
-            selectTemporarily(p, mace);
 
-        attemptAttack(mc);
+        // Only select a Mace very near the target, preserving fireworks.
+        if (p.distanceToSqr(candidate) <= 16.0) {
+            int chosen = maceSlot(p, approachAirborne);
+            if (chosen >= 0) selectForAttack(p, chosen);
+        }
+        tryAutoHit(mc);
     }
 }
