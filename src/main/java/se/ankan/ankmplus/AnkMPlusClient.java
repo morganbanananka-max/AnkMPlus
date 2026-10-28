@@ -362,6 +362,44 @@ public final class AnkMPlusClient implements ClientModInitializer {
     }
 
     /**
+     * A fast flyby can pass the complete 3-block reach window between
+     * 20-Hz client ticks. Run EQUIPMENT PREPARATION at render frequency too,
+     * but never attack unless strict aimedTarget passes.
+     */
+    private void prepareCloseFlyby(Minecraft mc) {
+        LocalPlayer p = mc.player;
+        if (!autoHit || !autoSwap || p == null || mc.level == null ||
+                mc.gameMode == null || mc.screen != null ||
+                tick < armorRetryAfterTick) return;
+
+        boolean air = airborne(p) || (armorMode != ArmorMode.NONE && approachAirborne);
+        if (!air) return;
+        LivingEntity candidate = approachTarget(mc);
+        if (candidate == null) return;
+        approach = candidate;
+        approachAirborne = true;
+        lastApproachTick = tick;
+
+        Vec3 to = candidate.getBoundingBox().getCenter().subtract(p.getEyePosition());
+        double ahead = to.dot(p.getLookAngle());
+        if (ahead <= 0) return;
+        double distance = FlightDecision.elytraRemoveDistance(p.getDeltaMovement().length());
+        if (armorMode == ArmorMode.NONE &&
+                p.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA) &&
+                ahead <= distance && equipChestplateOrRemoveElytra(mc)) {
+            restoreAfterTick = tick + 8;
+            log("flight gear prepared within " + String.format(Locale.ROOT, "%.1f", ahead) + " blocks");
+        }
+
+        // Keep rockets available on distant approach. Once genuinely close
+        // hold the Mace *before* the exact 3-block hit window opens.
+        if (p.distanceToSqr(candidate) <= 16.0) {
+            int mace = maceSlot(p, true);
+            if (mace >= 0) selectForAttack(p, mace);
+        }
+    }
+
+    /**
      * Precise auto-hit: player provides aim. Every packet is gated by exact
      * entity ray + block clipping and the player's attack cooldown.
      */
@@ -371,6 +409,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
                 p.isSpectator() || p.isDeadOrDying() || mc.level == null ||
                 tick - lastHitTick < 9 || !p.inventoryMenu.getCarried().isEmpty()) return;
 
+        prepareCloseFlyby(mc);
         LivingEntity target = aimedTarget(mc);
         if (target == null) return; // Absolutely NO off-hitbox auto attacks.
         boolean air = !p.onGround() &&
