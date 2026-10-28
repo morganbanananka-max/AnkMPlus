@@ -169,7 +169,8 @@ public final class AnkMPlusClient implements ClientModInitializer {
         Vec3 eye = p.getEyePosition();
         Vec3 dir = p.getLookAngle();
         double speedPerTick = p.getDeltaMovement().length();
-        double distance = Math.max(11.0, Math.min(30.0, 11.0 + 6.0 * speedPerTick));
+        // Preparation only: detect early, but KEEP the Elytra on until close.
+        double distance = Math.max(12.0, Math.min(32.0, 12.0 + 7.0 * speedPerTick));
         Player result = null;
         double nearest = Double.POSITIVE_INFINITY;
         for (Player other : mc.level.players()) {
@@ -184,6 +185,12 @@ public final class AnkMPlusClient implements ClientModInitializer {
                 nearest = ahead;
                 result = other;
             }
+        }
+        // A close, directly targeted player must be usable even if fast flight
+        // caused the wide approach cone to miss a tick entirely.
+        if (mc.hitResult instanceof EntityHitResult hit &&
+                hit.getEntity() instanceof Player direct && direct != p && direct.isAlive()) {
+            return direct;
         }
         return result;
     }
@@ -297,7 +304,8 @@ public final class AnkMPlusClient implements ClientModInitializer {
         if (!(target instanceof Player) || !target.isAlive()) return;
         if (preparedInAir && p.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA))
             return;
-        if (p.getAttackStrengthScale(0f) < 0.92f) return;
+        // A slightly early hit is preferable to no hit in a 1-tick flyby.
+        if (p.getAttackStrengthScale(0f) < (preparedInAir ? 0.80f : 0.92f)) return;
         if (!p.hasLineOfSight(target) || rayDistance(p, target) > MAX_REACH) return;
 
         int mace = preferredMace(p, preparedInAir);
@@ -389,8 +397,9 @@ public final class AnkMPlusClient implements ClientModInitializer {
             // Retain the target briefly while approaching rapidly.
             if (preparedTarget != null &&
                     preparedTarget.isAlive() &&
-                    tick - lastAimedAt <= 10 &&
-                    tick - acquiredAt <= 25 &&
+                    tick - lastAimedAt <= 14 &&
+                    tick - acquiredAt <= 38 &&
+                    p.distanceToSqr(preparedTarget) <= 400 &&
                     !p.onGround()) {
                 attemptAttack(mc);
                 return;
@@ -413,6 +422,9 @@ public final class AnkMPlusClient implements ClientModInitializer {
                     ", airborne=" + preparedInAir);
         }
         lastAimedAt = tick;
+        // If the player takes off while already approaching, keep the same
+        // target but upgrade the plan to an airborne smash.
+        if (falling(p)) preparedInAir = true;
 
         int mace = preferredMace(p, preparedInAir);
         if (mace < 0) {
@@ -427,9 +439,20 @@ public final class AnkMPlusClient implements ClientModInitializer {
         }
 
         if (preparedInAir && p.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA)) {
-            if (!removeElytra(mc)) {
-                cancelApproach("cannot safely move Elytra");
-                return;
+            // Removing Elytra 20-30 blocks out kills gliding momentum and was
+            // the main reason previous builds never reached the opponent.
+            // Allow up to ~3 ticks for the inventory transaction at high speed.
+            double closing = candidate.getBoundingBox().getCenter()
+                    .subtract(p.getEyePosition()).dot(p.getLookAngle());
+            double speed = p.getDeltaMovement().length();
+            double switchDistance = Math.max(4.0, Math.min(12.0, 2.0 + speed * 3.0));
+            if (closing <= switchDistance) {
+                if (!removeElytra(mc)) {
+                    // Don't cancel permanently if the inventory is briefly busy.
+                    // Keep normal attacks and retry as long as the target stays.
+                    log("Elytra move pending (slot unavailable)");
+                    return;
+                }
             }
         }
         if (autoSwap && !(axeFirst && tick < axeCooldownUntil))
