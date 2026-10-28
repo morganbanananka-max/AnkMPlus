@@ -30,6 +30,7 @@ jobs:
         run: |
           set -o pipefail
           timeout 600s gradle --no-daemon --console=plain runClientGameTest 2>&1 | tee real-gameplay.log
+          grep -F "[AnkM+ GameTest] PASS: no off-target hits; no wall hits; Steve damaged" real-gameplay.log
       - name: Save Minecraft client game test log
         if: always()
         uses: actions/upload-artifact@v4
