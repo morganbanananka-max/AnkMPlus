@@ -104,7 +104,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
         if (other == self || !other.isAlive() || other.isSpectator()) return false;
         if (other instanceof Player) return true;
         String name = other.getName().getString().toLowerCase(Locale.ROOT);
-        return name.equals("steve") || name.contains("dummy") || name.contains("bot");
+        return name.contains("steve") || name.contains("dummy") || name.contains("bot");
     }
 
     /**
