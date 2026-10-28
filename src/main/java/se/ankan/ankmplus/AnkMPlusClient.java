@@ -29,7 +29,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.Locale;
 
 /**
- * AnkM+ 9.6 / Fabric 1.21.11.
+ * AnkM+ 9.7 / Fabric 1.21.11.
  * Keeps AUTO-HIT, but NEVER uses a softened hitbox, an aimbot or extended reach.
  * The camera/look ray must truly intersect an entity's bounding box within
  * 3.0 blocks with no block between eye and hit point.
@@ -95,7 +95,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
         log("client ready | N auto-hit | B auto-swap | V shield combo");
     }
 
-    private static void log(String s) { System.out.println("[AnkM+ 9.6.1] " + s); }
+    private static void log(String s) { System.out.println("[AnkM+ 9.7] " + s); }
 
     private static boolean airborne(LocalPlayer p) {
         return !p.onGround() && (p.isFallFlying() ||
