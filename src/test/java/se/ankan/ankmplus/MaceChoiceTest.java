@@ -12,7 +12,9 @@ class MaceChoiceTest {
         assertTrue(MaceChoice.points(false, 0, 4, 0) >
                    MaceChoice.points(false, 0, 3, 3));
     }
-    @Test void rejectGroundMaceWithoutBreach() {
-        assertEquals(Integer.MIN_VALUE, MaceChoice.points(false, 5, 0, 3));
+    @Test void useAvailableMaceEvenWithoutBreachOnGround() {
+        assertTrue(MaceChoice.points(false, 5, 0, 3) >= 0);
+        assertTrue(MaceChoice.points(false, 0, 1, 0) > MaceChoice.points(false, 5, 0, 3));
+        assertEquals(0, MaceChoice.points(false, 0, 0, 0));
     }
 }
