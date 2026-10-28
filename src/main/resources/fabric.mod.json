@@ -3,7 +3,7 @@
   "id": "ankmplus",
   "version": "${version}",
   "name": "AnkM+",
-  "description": "Fast Elytra Mace preparation, manual aiming, automatic hit and safe equipment recovery.",
+  "description": "Manual Mace selection and two-click shield Stunslam. No automatic attacks or Elytra swapping.",
   "authors": ["Ankan Army"],
   "license": "MIT",
   "environment": "client",
