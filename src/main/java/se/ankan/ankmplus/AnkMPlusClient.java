@@ -62,6 +62,8 @@ public final class AnkMPlusClient implements ClientModInitializer {
 
     private ItemStack originalElytra = ItemStack.EMPTY;
     private int elytraInventorySlot = -1;
+    private int swappedChestplateHotbar = -1;
+    private ItemStack expectedChestplate = ItemStack.EMPTY;
     private int restoreAfterTick;
 
     public AnkMPlusClient() {
@@ -273,15 +275,43 @@ public final class AnkMPlusClient implements ClientModInitializer {
                 p.inventoryMenu.getCarried().isEmpty();
     }
 
-    /**
-     * Chest armor slot 6 -> a known, empty inventory-menu slot 9..35.
-     * Nothing is dropped. Original Elytra identity is remembered.
-     */
+    private static boolean chestplate(ItemStack item) {
+        return item.is(Items.NETHERITE_CHESTPLATE) ||
+                item.is(Items.DIAMOND_CHESTPLATE) ||
+                item.is(Items.IRON_CHESTPLATE) ||
+                item.is(Items.GOLDEN_CHESTPLATE) ||
+                item.is(Items.CHAINMAIL_CHESTPLATE) ||
+                item.is(Items.LEATHER_CHESTPLATE);
+    }
+
+    /** Swap Elytra for a chestplate from the hotbar; otherwise stow it safely. */
     private boolean removeElytra(Minecraft mc) {
         LocalPlayer p = mc.player;
         if (elytraInventorySlot >= 0) return true;
         if (!inventoryReady(mc) || p == null ||
                 !p.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA)) return false;
+        // One atomic armor/hotbar SWAP is safer than multi-click inventory
+        // juggling and matches the Netherite Chestplate in the reference video.
+        int armorHotbarSlot = -1;
+        for (int slot = 0; slot < 9; slot++) {
+            if (chestplate(p.getInventory().getItem(slot))) {
+                if (armorHotbarSlot < 0 ||
+                        p.getInventory().getItem(slot).is(Items.NETHERITE_CHESTPLATE))
+                    armorHotbarSlot = slot;
+                if (p.getInventory().getItem(slot).is(Items.NETHERITE_CHESTPLATE)) break;
+            }
+        }
+        if (armorHotbarSlot >= 0) {
+            originalElytra = p.getItemBySlot(EquipmentSlot.CHEST).copy();
+            expectedChestplate = p.getInventory().getItem(armorHotbarSlot).copy();
+            swappedChestplateHotbar = armorHotbarSlot;
+            elytraInventorySlot = 36 + armorHotbarSlot;
+            mc.gameMode.handleInventoryMouseClick(
+                    p.inventoryMenu.containerId, CHEST_ARMOR_MENU_SLOT,
+                    armorHotbarSlot, ClickType.SWAP, p);
+            log("Elytra swapped for chestplate; stored in hotbar " + armorHotbarSlot);
+            return true;
+        }
         int empty = -1;
         for (int slot = 9; slot <= 35; slot++) {
             if (p.inventoryMenu.getSlot(slot).getItem().isEmpty()) {
@@ -318,8 +348,23 @@ public final class AnkMPlusClient implements ClientModInitializer {
         if (matchingItem(p.getItemBySlot(EquipmentSlot.CHEST), originalElytra)) {
             elytraInventorySlot = -1;
             originalElytra = ItemStack.EMPTY;
+            swappedChestplateHotbar = -1;
+            expectedChestplate = ItemStack.EMPTY;
             log("elytra re-equipped");
             return true;
+        }
+        // Put the original Netherite Chestplate back exactly where it came
+        // from, while restoring the original Elytra to the armor slot.
+        if (swappedChestplateHotbar >= 0) {
+            int hotbarMenuSlot = 36 + swappedChestplateHotbar;
+            if (!matchingItem(p.inventoryMenu.getSlot(hotbarMenuSlot).getItem(), originalElytra))
+                return false;
+            if (!matchingItem(p.getItemBySlot(EquipmentSlot.CHEST), expectedChestplate))
+                return false;
+            if (!p.inventoryMenu.getCarried().isEmpty()) return false;
+            mc.gameMode.handleInventoryMouseClick(p.inventoryMenu.containerId,
+                    CHEST_ARMOR_MENU_SLOT, swappedChestplateHotbar, ClickType.SWAP, p);
+            return matchingItem(p.getItemBySlot(EquipmentSlot.CHEST), originalElytra);
         }
         if (!p.getItemBySlot(EquipmentSlot.CHEST).isEmpty()) return false;
         int id = p.inventoryMenu.containerId;
