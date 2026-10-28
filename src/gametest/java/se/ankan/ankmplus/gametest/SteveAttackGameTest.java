@@ -161,6 +161,43 @@ public final class SteveAttackGameTest implements FabricClientGameTest {
             if (!restored)
                 throw new AssertionError("Real inventory restore misplaced Elytra/chestplate");
             System.out.println("[AnkM+ GameTest] PASS: real Elytra/chestplate swap and original hotbar restoration");
+
+            // CASE 5: Missed/aborted approach must not leave the chestplate on forever.
+            // Keep a Steve dummy IN the preparation cone, but remove the Mace so
+            // it is impossible to score a hit or clear approach via attacking.
+            ctx.waitTicks(12); // Let the previous swap cooldown expire.
+            server.runCommand("summon minecraft:zombie 0 65 2 {NoAI:1b,PersistenceRequired:1b,CustomName:'{\"text\":\"Steve\"}'}");
+            ctx.runOnClient(mc -> { mc.player.setYRot(0); mc.player.setXRot(0); });
+            ctx.waitTicks(5);
+            boolean startedSecond = ctx.computeOnClient(mc ->
+                    invokeEquipment(mc, "equipChestplateOrRemoveElytra", true));
+            if (!startedSecond) throw new AssertionError("Aborted-pass swap refused");
+            ctx.computeOnClient(mc -> {
+                try {
+                    Class<?> cls = AnkMPlusClient.class;
+                    Field instanceField = cls.getDeclaredField("INSTANCE");
+                    instanceField.setAccessible(true);
+                    Object mod = instanceField.get(null);
+                    Field auto = cls.getDeclaredField("autoHit");
+                    Field start = cls.getDeclaredField("restoreAfterTick");
+                    Field tickField = cls.getDeclaredField("tick");
+                    auto.setAccessible(true);
+                    start.setAccessible(true);
+                    tickField.setAccessible(true);
+                    auto.setBoolean(mod, true);
+                    start.setInt(mod, tickField.getInt(mod) + 1);
+                    return true;
+                } catch (ReflectiveOperationException e) {
+                    throw new AssertionError("Cannot set up aborted approach check", e);
+                }
+            });
+            ctx.waitTicks(16);
+            boolean abortedRestored = ctx.computeOnClient(mc ->
+                    mc.player.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA)
+                    && mc.player.getInventory().getItem(1).is(Items.NETHERITE_CHESTPLATE));
+            if (!abortedRestored)
+                throw new AssertionError("Missed attack left chestplate worn or Elytra in wrong slot");
+            System.out.println("[AnkM+ GameTest] PASS: missed-attack Elytra recovery");
         }
     }
 }
