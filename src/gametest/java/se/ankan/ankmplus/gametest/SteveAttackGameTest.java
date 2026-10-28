@@ -5,6 +5,11 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.Items;
+import se.ankan.ankmplus.AnkMPlusClient;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 
 /**
  * REAL integrated-server test.
@@ -28,6 +33,30 @@ public final class SteveAttackGameTest implements FabricClientGameTest {
     private static void assertHealthSame(float before, float after, String message) {
         if (before < 1 || Math.abs(before - after) > 0.01f)
             throw new AssertionError(message + " (" + before + " -> " + after + ")");
+    }
+
+    /** Invoke the same inventory transaction used during an actual Elytra hit. */
+    private static boolean invokeEquipment(Minecraft mc, String name, boolean disableAuto) {
+        try {
+            Class<?> cls = AnkMPlusClient.class;
+            Field instanceField = cls.getDeclaredField("INSTANCE");
+            instanceField.setAccessible(true);
+            Object instance = instanceField.get(null);
+            if (instance == null) throw new AssertionError("AnkM+ not initialized");
+            if (disableAuto) {
+                Field auto = cls.getDeclaredField("autoHit");
+                auto.setAccessible(true);
+                auto.setBoolean(instance, false);
+                Field restoreAt = cls.getDeclaredField("restoreAfterTick");
+                restoreAt.setAccessible(true);
+                restoreAt.setInt(instance, Integer.MAX_VALUE);
+            }
+            Method method = cls.getDeclaredMethod(name, Minecraft.class);
+            method.setAccessible(true);
+            return (boolean) method.invoke(instance, mc);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("Failed real inventory interaction: " + name, e);
+        }
     }
 
     @Override
@@ -99,6 +128,39 @@ public final class SteveAttackGameTest implements FabricClientGameTest {
 
             System.out.println("[AnkM+ GameTest] PASS: no off-target hits; no wall hits; Steve damaged "
                     + initial + " -> " + hit);
+
+            // Exercise the REAL player inventory-click packets rather than
+            // only checking a simulated transaction plan.
+            server.runCommand("kill @e[type=minecraft:zombie]");
+            server.runCommand("clear @p");
+            server.runCommand("item replace entity @p armor.chest with minecraft:elytra");
+            server.runCommand("item replace entity @p hotbar.1 with minecraft:netherite_chestplate");
+            ctx.waitTicks(5);
+
+            boolean startedCorrectly = ctx.computeOnClient(mc ->
+                    mc.player.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA)
+                    && mc.player.getInventory().getItem(1).is(Items.NETHERITE_CHESTPLATE));
+            if (!startedCorrectly) throw new AssertionError("Minecraft did not equip test Elytra/chestplate");
+
+            boolean swapIssued = ctx.computeOnClient(mc ->
+                    invokeEquipment(mc, "equipChestplateOrRemoveElytra", true));
+            if (!swapIssued) throw new AssertionError("Elytra/chestplate swap refused");
+            ctx.waitTicks(4);
+            boolean exchanged = ctx.computeOnClient(mc ->
+                    mc.player.getItemBySlot(EquipmentSlot.CHEST).is(Items.NETHERITE_CHESTPLATE)
+                    && mc.player.getInventory().getItem(1).is(Items.ELYTRA));
+            if (!exchanged) throw new AssertionError("Real inventory swap did not equip chestplate");
+
+            boolean restoreIssued = ctx.computeOnClient(mc ->
+                    invokeEquipment(mc, "restoreArmor", false));
+            if (!restoreIssued) throw new AssertionError("Real Elytra restore refused");
+            ctx.waitTicks(4);
+            boolean restored = ctx.computeOnClient(mc ->
+                    mc.player.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA)
+                    && mc.player.getInventory().getItem(1).is(Items.NETHERITE_CHESTPLATE));
+            if (!restored)
+                throw new AssertionError("Real inventory restore misplaced Elytra/chestplate");
+            System.out.println("[AnkM+ GameTest] PASS: real Elytra/chestplate swap and original hotbar restoration");
         }
     }
 }
