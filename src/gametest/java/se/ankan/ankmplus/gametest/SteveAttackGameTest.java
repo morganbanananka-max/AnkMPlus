@@ -33,7 +33,7 @@ public final class SteveAttackGameTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext ctx) {
         try (TestSingleplayerContext world = ctx.worldBuilder().create()) {
-            world.getClientLevel().waitForChunksRender();
+            world.getClientWorld().waitForChunksRender();
             var server = world.getServer();
 
             // Reset the flat arena and park the player facing away from target.
@@ -44,7 +44,10 @@ public final class SteveAttackGameTest implements FabricClientGameTest {
             server.runCommand("tp @p 0 65 0 90 0");
             server.runCommand("give @p minecraft:mace");
             server.runCommand("enchant @p minecraft:breach 1");
-            ctx.getInput().lookAt(90, 0);
+            ctx.runOnClient(mc -> {
+                mc.player.setYRot(90);
+                mc.player.setXRot(0);
+            });
             server.runCommand("summon minecraft:zombie 0 65 2 {NoAI:1b,PersistenceRequired:1b,CustomName:'{\"text\":\"Steve\"}'}");
             ctx.waitTicks(8);
             float initial = ctx.computeOnClient(SteveAttackGameTest::health);
@@ -58,7 +61,10 @@ public final class SteveAttackGameTest implements FabricClientGameTest {
 
             // CASE 2: Looking at Steve through a wall is not a valid attack.
             server.runCommand("setblock 0 66 1 minecraft:glass");
-            ctx.getInput().lookAt(0, 0);
+            ctx.runOnClient(mc -> {
+                mc.player.setYRot(0);
+                mc.player.setXRot(0);
+            });
             ctx.waitTicks(15);
             float blocked = ctx.computeOnClient(SteveAttackGameTest::health);
             assertHealthSame(initial, blocked, "CHEAT: auto-hit struck through glass");
