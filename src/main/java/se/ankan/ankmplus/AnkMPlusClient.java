@@ -28,10 +28,10 @@ import net.minecraft.world.phys.Vec3;
 import java.util.Optional;
 
 /**
- * AnkM+ 9.4 for Minecraft Java 1.21.11 / Fabric.
+ * AnkM+ 9.5 for Minecraft Java 1.21.11 / Fabric.
  * The mod never moves the camera, cancels normal attacks, displays an overlay,
  * or attacks a hidden target. Preparation searches along the user's OWN aim.
- * The final attack requires a physical ray intersection inside ordinary reach.
+ * Final attacks require normal server reach and line of sight, but forgive small aim errors.
  */
 public final class AnkMPlusClient implements ClientModInitializer {
     private static final int CHEST_ARMOR_MENU_SLOT = 6;
@@ -90,7 +90,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
     }
 
     private static void log(String text) {
-        System.out.println("[AnkM+ 9.4] " + text);
+        System.out.println("[AnkM+ 9.5] " + text);
     }
 
     private static boolean falling(LocalPlayer p) {
@@ -205,6 +205,51 @@ public final class AnkMPlusClient implements ClientModInitializer {
         return name.contains("steve") || name.contains("dummy") || name.contains("bot");
     }
 
+    /**
+     * Real collision-box proximity, not an inflated reach or an aimbot.
+     * We allow a small directional error in a fast flyby and retain vanilla range.
+     */
+    private static double aimScore(LocalPlayer p, LivingEntity other) {
+        Vec3 eye = p.getEyePosition();
+        AABB box = other.getBoundingBox();
+        double x = Math.max(box.minX, Math.min(eye.x, box.maxX));
+        double y = Math.max(box.minY, Math.min(eye.y, box.maxY));
+        double z = Math.max(box.minZ, Math.min(eye.z, box.maxZ));
+        Vec3 toward = new Vec3(x, y, z).subtract(eye);
+        double dist = toward.length();
+        Vec3 focus = dist > 1.0e-5 ? toward : other.getBoundingBox().getCenter().subtract(eye);
+        double len = focus.length();
+        double alignment = len < 1.0e-5 ? 1.0 : focus.dot(p.getLookAngle()) / len;
+        boolean air = falling(p) || p.isFallFlying();
+        if (!HitWindow.allowed(dist, alignment, air)) return Double.POSITIVE_INFINITY;
+        if (!p.hasLineOfSight(other)) return Double.POSITIVE_INFINITY;
+        return HitWindow.score(dist, alignment);
+    }
+
+    private LivingEntity bestImmediateTarget(Minecraft mc) {
+        LocalPlayer p = mc.player;
+        if (p == null || mc.level == null) return null;
+        LivingEntity result = null;
+        double best = Double.POSITIVE_INFINITY;
+        // Favor an actual crosshair target when possible, without depending on it.
+        if (mc.hitResult instanceof EntityHitResult hit &&
+                hit.getEntity() instanceof LivingEntity direct && validTarget(p, direct)) {
+            double score = aimScore(p, direct);
+            if (Double.isFinite(score)) return direct;
+        }
+        for (var entity : mc.level.getEntities(p, p.getBoundingBox().inflate(4.0),
+                candidate -> candidate instanceof LivingEntity)) {
+            LivingEntity other = (LivingEntity) entity;
+            if (!validTarget(p, other)) continue;
+            double score = aimScore(p, other);
+            if (score < best) {
+                result = other;
+                best = score;
+            }
+        }
+        return result;
+    }
+
     private static double rayDistance(LocalPlayer p, LivingEntity entity) {
         Vec3 eye = p.getEyePosition();
         Vec3 end = eye.add(p.getLookAngle().scale(MAX_REACH));
@@ -297,7 +342,8 @@ public final class AnkMPlusClient implements ClientModInitializer {
         preparedInAir = false;
         axeFirst = false;
         restoreAfterTick = tick + 1;
-        rearmTicks = Math.max(rearmTicks, 6);
+        // A miss or brief loss of target must not disable the next flyby.
+        rearmTicks = Math.max(rearmTicks, "attack sent".equals(reason) ? 6 : 0);
     }
 
     /** Attack directly when a target reaches the crosshair, even between client ticks. */
@@ -307,23 +353,17 @@ public final class AnkMPlusClient implements ClientModInitializer {
                 mc.screen != null || p.isSpectator() || !autoAttack ||
                 cooldownTicks > 0) return;
 
-        // The old version only attacked a target first discovered on the 20-Hz
-        // client tick. At fast Elytra speed this often meant no target at all.
-        LivingEntity target = preparedTarget;
-        if (mc.hitResult instanceof EntityHitResult hit &&
-                hit.getEntity() instanceof LivingEntity direct && validTarget(p, direct)) {
-            if (target != direct) {
-                target = direct;
-                preparedTarget = direct;
-                preparedInAir = falling(p);
-                acquiredAt = tick;
-                lastAimedAt = tick;
-                axeFirst = false;
-            }
+        // Do not rely on a single exact crosshair ray in a fast pass.
+        LivingEntity target = bestImmediateTarget(mc);
+        if (target == null) return;
+        if (preparedTarget != target) {
+            preparedTarget = target;
+            preparedInAir = falling(p) || p.isFallFlying();
+            acquiredAt = tick;
+            axeFirst = false;
         }
-        if (target == null || !validTarget(p, target)) return;
-        if (rayDistance(p, target) > MAX_REACH || !p.hasLineOfSight(target)) return;
-        if (rearmTicks > 0 && tick - lastAimedAt > 2) return;
+        lastAimedAt = tick;
+        if (rearmTicks > 0) return;
 
         // The same-frame emergency path is essential for a high-speed flyby.
         // Packet order: inventory swap, selected hotbar slot, attack.
@@ -333,7 +373,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
         }
         if (p.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA) && preparedInAir)
             return;
-        if (p.getAttackStrengthScale(0f) < (preparedInAir ? 0.80f : 0.92f)) return;
+        if (p.getAttackStrengthScale(0f) < (preparedInAir ? 0.70f : 0.92f)) return;
 
         int mace = preferredMace(p, preparedInAir);
         if (mace < 0) return;
@@ -479,7 +519,10 @@ public final class AnkMPlusClient implements ClientModInitializer {
                 }
             }
         }
-        if (autoSwap && !(axeFirst && tick < axeCooldownUntil))
+        // Do not switch away from a firework rocket 20+ blocks out.
+        // The same-frame hit path selects Mace when the hitbox enters reach.
+        double distanceSq = p.distanceToSqr(candidate);
+        if (autoSwap && distanceSq <= 36.0 && !(axeFirst && tick < axeCooldownUntil))
             selectTemporarily(p, mace);
 
         attemptAttack(mc);
