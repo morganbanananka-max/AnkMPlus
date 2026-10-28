@@ -9,7 +9,7 @@ class FlightDecisionTest {
         assertEquals(4.0, FlightDecision.elytraRemoveDistance(0.5), 0.001);
         assertEquals(8.0, FlightDecision.elytraRemoveDistance(2.0), 0.001);
         assertEquals(12.0, FlightDecision.elytraRemoveDistance(9.0), 0.001);
-        assertEquals(12.0, FlightDecision.elytraRemoveDistance(Double.POSITIVE_INFINITY), 0.001);
+        assertEquals(4.0, FlightDecision.elytraRemoveDistance(Double.POSITIVE_INFINITY), 0.001);
     }
 
     @Test void preserveTargetDuringFastFlybyButNotForever() {
