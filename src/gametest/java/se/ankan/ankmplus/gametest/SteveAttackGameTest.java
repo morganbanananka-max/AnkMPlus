@@ -59,6 +59,20 @@ public final class SteveAttackGameTest implements FabricClientGameTest {
         }
     }
 
+    private static boolean setAutoHit(Minecraft mc, boolean value) {
+        try {
+            Field instanceField = AnkMPlusClient.class.getDeclaredField("INSTANCE");
+            instanceField.setAccessible(true);
+            Object mod = instanceField.get(null);
+            Field enabled = AnkMPlusClient.class.getDeclaredField("autoHit");
+            enabled.setAccessible(true);
+            enabled.setBoolean(mod, value);
+            return true;
+        } catch (ReflectiveOperationException error) {
+            throw new AssertionError("Cannot switch auto-hit for game test", error);
+        }
+    }
+
     @Override
     public void runTest(ClientGameTestContext ctx) {
         try (TestSingleplayerContext world = ctx.worldBuilder().create()) {
@@ -198,6 +212,30 @@ public final class SteveAttackGameTest implements FabricClientGameTest {
             if (!abortedRestored)
                 throw new AssertionError("Missed attack left chestplate worn or Elytra in wrong slot");
             System.out.println("[AnkM+ GameTest] PASS: missed-attack Elytra recovery");
+
+            // CASE 6: The actual failing case found in video review:
+            // ground hit with a regular Mace (no Breach enchantment) must
+            // still work instead of silently leaving the chestplate selected.
+            ctx.computeOnClient(mc -> setAutoHit(mc, false));
+            server.runCommand("kill @e[type=minecraft:zombie]");
+            server.runCommand("clear @p");
+            server.runCommand("item replace entity @p armor.chest with minecraft:iron_chestplate");
+            server.runCommand("item replace entity @p hotbar.0 with minecraft:mace");
+            server.runCommand("tp @p 0 65 0 90 0");
+            ctx.runOnClient(mc -> { mc.player.setYRot(90); mc.player.setXRot(0); });
+            server.runCommand("summon minecraft:zombie 0 65 2 {NoAI:1b,PersistenceRequired:1b,CustomName:'{\"text\":\"Steve\"}'}");
+            ctx.waitTicks(12);
+            float vanillaMaceBefore = ctx.computeOnClient(SteveAttackGameTest::health);
+            if (vanillaMaceBefore < 1) throw new AssertionError("Unenchanted Mace dummy missing");
+            ctx.runOnClient(mc -> { mc.player.setYRot(0); mc.player.setXRot(0); });
+            ctx.computeOnClient(mc -> setAutoHit(mc, true));
+            ctx.waitTicks(18);
+            float vanillaMaceAfter = ctx.computeOnClient(SteveAttackGameTest::health);
+            if (!(vanillaMaceAfter >= 0 && vanillaMaceAfter < vanillaMaceBefore)) {
+                throw new AssertionError("GROUND MACE FAILED: no-Breach Mace did not damage Steve, "
+                        + vanillaMaceBefore + " -> " + vanillaMaceAfter);
+            }
+            System.out.println("[AnkM+ GameTest] PASS: ground auto-hit works using a Mace without Breach");
         }
     }
 }
