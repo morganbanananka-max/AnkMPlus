@@ -19,7 +19,7 @@ public final class SteveAttackGameTest implements FabricClientGameTest {
         for (var entity : mc.level.getEntities(mc.player,
                 mc.player.getBoundingBox().inflate(8.0),
                 other -> other instanceof LivingEntity)) {
-            if (entity.getName().getString().equals("Steve"))
+            if (entity.getName().getString().contains("Steve"))
                 return ((LivingEntity) entity).getHealth();
         }
         return -1;
