@@ -28,7 +28,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.Optional;
 
 /**
- * AnkM+ 9.2 for Minecraft Java 1.21.11 / Fabric.
+ * AnkM+ 9.4 for Minecraft Java 1.21.11 / Fabric.
  * The mod never moves the camera, cancels normal attacks, displays an overlay,
  * or attacks a hidden target. Preparation searches along the user's OWN aim.
  * The final attack requires a physical ray intersection inside ordinary reach.
@@ -47,6 +47,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
 
     private LocalPlayer session;
     private LivingEntity preparedTarget;
+    private int lastAttackFrame;
     private boolean preparedInAir;
     private int acquiredAt;
     private int lastAimedAt;
@@ -90,7 +91,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
     }
 
     private static void log(String text) {
-        System.out.println("[AnkM+ 9.2] " + text);
+        System.out.println("[AnkM+ 9.4] " + text);
     }
 
     private static boolean falling(LocalPlayer p) {
@@ -162,8 +163,8 @@ public final class AnkMPlusClient implements ClientModInitializer {
         clearHotbar();
     }
 
-    /** Used ONLY to prepare equipment. Never attacks or aims automatically. */
-    private Player playerInApproachCone(Minecraft mc) {
+    /** Finds PvP targets and named practice dummies, not just Player entities. */
+    private LivingEntity playerInApproachCone(Minecraft mc) {
         LocalPlayer p = mc.player;
         if (p == null || mc.level == null) return null;
         Vec3 eye = p.getEyePosition();
@@ -171,10 +172,12 @@ public final class AnkMPlusClient implements ClientModInitializer {
         double speedPerTick = p.getDeltaMovement().length();
         // Preparation only: detect early, but KEEP the Elytra on until close.
         double distance = Math.max(12.0, Math.min(32.0, 12.0 + 7.0 * speedPerTick));
-        Player result = null;
+        LivingEntity result = null;
         double nearest = Double.POSITIVE_INFINITY;
-        for (Player other : mc.level.players()) {
-            if (other == p || !other.isAlive() || other.isSpectator()) continue;
+        for (var entity : mc.level.getEntities(p, p.getBoundingBox().inflate(distance),
+                candidate -> candidate instanceof LivingEntity)) {
+            LivingEntity other = (LivingEntity) entity;
+            if (!validTarget(p, other)) continue;
             Vec3 relative = other.getBoundingBox().getCenter().subtract(eye);
             double ahead = relative.dot(dir);
             if (ahead <= 0 || ahead >= distance) continue;
@@ -189,10 +192,18 @@ public final class AnkMPlusClient implements ClientModInitializer {
         // A close, directly targeted player must be usable even if fast flight
         // caused the wide approach cone to miss a tick entirely.
         if (mc.hitResult instanceof EntityHitResult hit &&
-                hit.getEntity() instanceof Player direct && direct != p && direct.isAlive()) {
+                hit.getEntity() instanceof LivingEntity direct && validTarget(p, direct)) {
             return direct;
         }
         return result;
+    }
+
+    private static boolean validTarget(LocalPlayer p, LivingEntity other) {
+        if (other == p || !other.isAlive() || other.isSpectator()) return false;
+        // Client practice dummies frequently render as Steve but are not Player instances.
+        if (other instanceof Player) return true;
+        String name = other.getName().getString().toLowerCase(java.util.Locale.ROOT);
+        return name.contains("steve") || name.contains("dummy") || name.contains("bot");
     }
 
     private static double rayDistance(LocalPlayer p, LivingEntity entity) {
@@ -290,23 +301,40 @@ public final class AnkMPlusClient implements ClientModInitializer {
         rearmTicks = Math.max(rearmTicks, 6);
     }
 
-    /**
-     * Called once each rendered world frame (plus tick fallback).
-     * Does not depend on a 20-Hz crosshair-hit cache for high-speed flights.
-     */
+    /** Attack directly when a target reaches the crosshair, even between client ticks. */
     private void attemptAttack(Minecraft mc) {
         LocalPlayer p = mc.player;
         if (p == null || mc.level == null || mc.gameMode == null ||
                 mc.screen != null || p.isSpectator() || !autoAttack ||
-                cooldownTicks > 0 || rearmTicks > 0) return;
+                cooldownTicks > 0) return;
 
+        // The old version only attacked a target first discovered on the 20-Hz
+        // client tick. At fast Elytra speed this often meant no target at all.
         LivingEntity target = preparedTarget;
-        if (!(target instanceof Player) || !target.isAlive()) return;
-        if (preparedInAir && p.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA))
+        if (mc.hitResult instanceof EntityHitResult hit &&
+                hit.getEntity() instanceof LivingEntity direct && validTarget(p, direct)) {
+            if (target != direct) {
+                target = direct;
+                preparedTarget = direct;
+                preparedInAir = falling(p);
+                acquiredAt = tick;
+                lastAimedAt = tick;
+                axeFirst = false;
+            }
+        }
+        if (target == null || !validTarget(p, target)) return;
+        if (rayDistance(p, target) > MAX_REACH || !p.hasLineOfSight(target)) return;
+        if (rearmTicks > 0 && tick - lastAimedAt > 2) return;
+
+        // The same-frame emergency path is essential for a high-speed flyby.
+        // Packet order: inventory swap, selected hotbar slot, attack.
+        if (p.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA) &&
+                (preparedInAir || p.isFallFlying())) {
+            if (!removeElytra(mc)) return;
+        }
+        if (p.getItemBySlot(EquipmentSlot.CHEST).is(Items.ELYTRA) && preparedInAir)
             return;
-        // A slightly early hit is preferable to no hit in a 1-tick flyby.
         if (p.getAttackStrengthScale(0f) < (preparedInAir ? 0.80f : 0.92f)) return;
-        if (!p.hasLineOfSight(target) || rayDistance(p, target) > MAX_REACH) return;
 
         int mace = preferredMace(p, preparedInAir);
         if (mace < 0) return;
@@ -333,7 +361,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
         mc.gameMode.attack(p, target);
         p.swing(InteractionHand.MAIN_HAND);
         cooldownTicks = 12;
-        log("mace attack sent to " + target.getName().getString());
+        log("mace attack packet sent to " + target.getName().getString());
         cancelApproach("attack sent");
     }
 
@@ -392,7 +420,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
             return;
         }
 
-        Player candidate = playerInApproachCone(mc);
+        LivingEntity candidate = playerInApproachCone(mc);
         if (candidate == null) {
             // Retain the target briefly while approaching rapidly.
             if (preparedTarget != null &&
@@ -447,9 +475,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
             double switchDistance = FlightDecision.elytraRemoveDistance(speed);
             if (closing <= switchDistance) {
                 if (!removeElytra(mc)) {
-                    // Don't cancel permanently if the inventory is briefly busy.
-                    // Keep normal attacks and retry as long as the target stays.
-                    log("Elytra move pending (slot unavailable)");
+                    // A busy inventory should not disable ordinary attacks.
                     return;
                 }
             }
