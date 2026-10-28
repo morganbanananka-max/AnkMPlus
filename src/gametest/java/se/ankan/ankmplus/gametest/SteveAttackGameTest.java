@@ -37,6 +37,7 @@ public final class SteveAttackGameTest implements FabricClientGameTest {
             var server = world.getServer();
 
             // Reset the flat arena and park the player facing away from target.
+            server.runCommand("time set midnight"); // Prevent zombie burning in daylight.
             server.runCommand("gamemode survival @p");
             server.runCommand("fill -5 65 -5 5 70 6 minecraft:air");
             server.runCommand("fill -5 64 -5 5 64 6 minecraft:stone");
