@@ -1,0 +1,78 @@
+name: AnkHack 0.4 Full direct download
+on:
+  push:
+    branches: [ankhack-full-download-04]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@v4
+        with:
+          name: AnkHack-0.4.0-Core-Fabric-1.21.11
+          run-id: 40971460979
+          github-token: ${{ github.token }}
+          path: core
+      - name: Build official Wurst 7.56.1 for Minecraft 1.21.11
+        run: |
+          git clone --depth 1 --branch v7.56.1-MC1.21.11 https://github.com/Wurst-Imperium/Wurst7.git upstream-wurst
+          cd upstream-wurst
+          chmod +x gradlew
+          ./gradlew --no-daemon --console=plain remapJar -x test
+      - name: Download official Meteor and Baritone 1.21.11 releases
+        run: |
+          mkdir -p engines
+          curl -fSL --retry 3 --max-time 140 'https://meteorclient.com/api/download?version=1.21.11' -o engines/meteor.jar
+          curl -fSL --retry 3 --max-time 140 'https://meteorclient.com/api/downloadBaritone?version=1.21.11' -o engines/baritone.jar
+      - name: Assemble and inspect nested Fabric mods
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import zipfile,json
+          core=list(Path('core').glob('*.jar'))
+          assert len(core)==1,core
+          out=Path('AnkHack-0.4.0-Full-GitHub.jar')
+          candidates=[]
+          for p in Path('upstream-wurst/build/libs').glob('*.jar'):
+              try:
+                  with zipfile.ZipFile(p) as z:
+                      j=json.loads(z.read('fabric.mod.json'))
+                      if j.get('id')=='wurst': candidates.append(p)
+              except Exception: pass
+          assert candidates, 'No remapped Wurst JAR'
+          wurst=max(candidates,key=lambda p:p.stat().st_size)
+          engines=[('Wurst-7.56.1.jar',wurst),('Meteor-1.21.11.jar',Path('engines/meteor.jar')),('Baritone-1.21.11.jar',Path('engines/baritone.jar'))]
+          for label,p in engines:
+              with zipfile.ZipFile(p) as z:
+                  m=json.loads(z.read('fabric.mod.json'))
+                  print(label,p.stat().st_size,m['id'],m['version'])
+                  assert m['id'] in ('wurst','meteor-client','baritone-meteor')
+          with zipfile.ZipFile(core[0]) as src,zipfile.ZipFile(out,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=6) as dst:
+              m=json.loads(src.read('fabric.mod.json'))
+              m['jars']=[{'file':'META-INF/jars/'+n} for n,p in engines]
+              m['description']='AnkHack 0.4 full experimental built from official Wurst, Meteor, Baritone sources/releases'
+              for i in src.infolist():
+                  if i.filename=='fabric.mod.json': continue
+                  dst.writestr(i,src.read(i.filename))
+              dst.writestr('fabric.mod.json',json.dumps(m,indent=2))
+              for n,p in engines:
+                  dst.write(p,'META-INF/jars/'+n)
+          with zipfile.ZipFile(out) as z:
+              assert z.testzip() is None
+              assert len(json.loads(z.read('fabric.mod.json'))['jars'])==3
+              print(out,out.stat().st_size)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnkHack-0.4.0-FULL-DOWNLOAD
+          path: AnkHack-0.4.0-Full-GitHub.jar
+          if-no-files-found: error
