@@ -23,6 +23,17 @@ jobs:
           mkdir -p ankhack
           base64 --decode ankhack-source.tar.gz.b64 | tar -xz -C ankhack
           test -f ankhack/src/main/resources/fabric.mod.json
+      - name: Patch entity counter for Yarn 1.21.11
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("ankhack/src/main/java/se/ankclient/ExtraOverlay.java")
+          s=p.read_text()
+          old='if(enabled(mods,"entities_hud"))info.add("Entities: "+w.getEntities().size());'
+          new='if(enabled(mods,"entities_hud")){int loaded=0;for(var entity:w.getEntities())loaded++;info.add("Entities: "+loaded);}'
+          assert old in s
+          p.write_text(s.replace(old,new))
+          PY
       - name: Compile
         working-directory: ankhack
         run: gradle --no-daemon --console=plain clean build
