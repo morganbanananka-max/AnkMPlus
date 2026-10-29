@@ -79,6 +79,20 @@ public final class ManualClickGameTest implements FabricClientGameTest {
                 p.getInventory().setSelectedSlot(0);
                 target.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.SHIELD));
                 target.startUsingItem(InteractionHand.OFF_HAND);
+                // Zombies are not player AI and do not automatically raise
+                // a shield. Simulate the same synchronized "using item" flag
+                // an actual blocking player sends to the client.
+                try {
+                    var field = LivingEntity.class.getDeclaredField("DATA_LIVING_ENTITY_FLAGS");
+                    field.setAccessible(true);
+                    @SuppressWarnings("unchecked")
+                    net.minecraft.network.syncher.EntityDataAccessor<Byte> flags =
+                            (net.minecraft.network.syncher.EntityDataAccessor<Byte>) field.get(null);
+                    byte value = target.getEntityData().get(flags);
+                    target.getEntityData().set(flags, (byte) (value | 1));
+                } catch (ReflectiveOperationException e) {
+                    throw new AssertionError("Cannot emulate genuine shield-use state", e);
+                }
                 boolean raised = target.isUsingItem();
                 boolean itemShield = target.getUseItem().is(Items.SHIELD);
                 boolean lineOfSight = p.hasLineOfSight(target);
