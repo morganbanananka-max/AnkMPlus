@@ -50,6 +50,18 @@ class ManualCombatDecisionTest {
                 false, false, false, true, true));
     }
 
+    @Test void explicitVArmCatchesShieldWithoutSyncedUseAnimation() {
+        assertFalse(ManualCombatDecision.shieldCandidate(false, true, false));
+        assertFalse(ManualCombatDecision.shieldCandidate(false, false, true));
+        assertTrue(ManualCombatDecision.shieldCandidate(false, true, true));
+        assertTrue(ManualCombatDecision.shieldCandidate(true, true, false));
+        assertEquals(AXE, ManualCombatDecision.action(true, true,
+                ManualCombatDecision.shieldCandidate(false, true, true),
+                false, false, true, true));
+        assertEquals(MACE, ManualCombatDecision.action(true, true,
+                false, true, false, true, true));
+    }
+
     @Test void fastMovementDoesNotBlockRealSmash() {
         // Eligibility deliberately has no horizontal-speed parameter.
         assertTrue(ManualCombatDecision.realSmash(false, false, 15.0));
