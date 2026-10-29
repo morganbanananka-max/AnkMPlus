@@ -1,0 +1,42 @@
+name: Minecraft manual Mace and Stunslam GameTest
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.1'
+      - name: Install Xvfb and OpenGL
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb libgl1-mesa-dri libglu1-mesa
+      - name: Run actual 1.21.11 manual shield tests
+        shell: bash
+        run: |
+          set -o pipefail
+          timeout 500s gradle --no-daemon --console=plain runClientGameTest 2>&1 | tee manual-gameplay.log
+          grep -F "[AnkM+ Manual GameTest] PASS: no auto-hit; no ground Mace; shield Axe then Mace with manual clicks" manual-gameplay.log
+      - name: Save game test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ankmplus-manual-gametest-log
+          path: manual-gameplay.log
+          if-no-files-found: ignore
