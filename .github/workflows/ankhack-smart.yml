@@ -1,7 +1,7 @@
-name: Build AnkHack Smart 0.3
+name: Build AnkHack Essential Hotfix 0.3.1
 on:
   push:
-    branches: [ankhack-smart-03]
+    branches: [ankhack-essential-031]
   workflow_dispatch:
 permissions:
   contents: read
@@ -41,6 +41,8 @@ jobs:
           p.write_text(text.replace("AnkHack  v0.2","AnkHack  v0.3"))
           PY
           test -f ankhack/src/main/resources/fabric.mod.json
+      - name: Apply Essential world-join safety patch
+        run: python3 fix_essential_031.py
       - name: Verify pure Java duplicate-matching logic
         run: |
           mkdir -p check
@@ -53,13 +55,13 @@ jobs:
         run: gradle --no-daemon --console=plain clean build
       - name: Verify installable JAR metadata
         run: |
-          test -s ankhack/build/libs/AnkHack-1.21.11-0.3.0.jar
-          unzip -p ankhack/build/libs/AnkHack-1.21.11-0.3.0.jar fabric.mod.json | grep -F '"id": "ankhack"'
-          unzip -p ankhack/build/libs/AnkHack-1.21.11-0.3.0.jar fabric.mod.json | grep -F '0.19.3'
-          ! jar tf ankhack/build/libs/AnkHack-1.21.11-0.3.0.jar | grep -q 'META-INF/jars/'
+          test -s ankhack/build/libs/AnkHack-1.21.11-0.3.1.jar
+          unzip -p ankhack/build/libs/AnkHack-1.21.11-0.3.1.jar fabric.mod.json | grep -F '"id": "ankhack"'
+          unzip -p ankhack/build/libs/AnkHack-1.21.11-0.3.1.jar fabric.mod.json | grep -F '0.19.3'
+          ! jar tf ankhack/build/libs/AnkHack-1.21.11-0.3.1.jar | grep -q 'META-INF/jars/'
       - name: Upload AnkHack 0.3 JAR
         uses: actions/upload-artifact@v4
         with:
-          name: AnkHack-Smart-1.21.11-Fabric-0.19.3
-          path: ankhack/build/libs/AnkHack-1.21.11-0.3.0.jar
+          name: AnkHack-Essential-Hotfix-0.3.1
+          path: ankhack/build/libs/AnkHack-1.21.11-0.3.1.jar
           if-no-files-found: error
