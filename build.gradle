@@ -42,3 +42,13 @@ tasks.withType(Test).configureEach {
     useJUnitPlatform()
 }
 
+
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = "ankmplus-manual-tests"
+        enableGameTests = false
+        enableClientGameTests = true
+        eula = true
+    }
+}
