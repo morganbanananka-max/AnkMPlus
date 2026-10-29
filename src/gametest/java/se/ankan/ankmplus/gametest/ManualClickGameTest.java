@@ -5,7 +5,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.InteractionHand;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -46,8 +46,8 @@ public final class ManualClickGameTest implements FabricClientGameTest {
             server.runCommand("summon minecraft:zombie 0 65 2 {NoAI:1b,PersistenceRequired:1b,CustomName:'{\"text\":\"Steve\"}'}");
             ctx.waitTicks(10);
             for (int retries = 0; retries < 80
-                    && ctx.computeOnClient(ManualClickGameTest::steve) == null; retries++) ctx.waitTick();
-            if (ctx.computeOnClient(ManualClickGameTest::steve) == null)
+                    && !ctx.computeOnClient(mc -> steve(mc) != null); retries++) ctx.waitTick();
+            if (!ctx.computeOnClient(mc -> steve(mc) != null))
                 throw new AssertionError("Steve not loaded in manual test");
 
             // Control: NO input/no auto hit means Steve must retain full health.
