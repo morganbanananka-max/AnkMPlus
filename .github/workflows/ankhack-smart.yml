@@ -1,0 +1,62 @@
+name: Build AnkHack Smart 0.3
+on:
+  push:
+    branches: [ankhack-smart-03]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.1'
+      - name: Restore working AnkHack baseline and overlay
+        run: |
+          set -euo pipefail
+          mkdir -p ankhack
+          base64 -d ankhack-source.tar.gz.b64 | tar -xz -C ankhack
+          cat ankhack-v03.part1 ankhack-v03.part2 ankhack-v03.part3 | base64 -d | xz -t
+          cat ankhack-v03.part1 ankhack-v03.part2 ankhack-v03.part3 | base64 -d | tar -xJ -C ankhack
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("ankhack/src/main/java/se/ankclient/ExtraOverlay.java")
+          text=p.read_text()
+          bad='if(enabled(mods,"entities_hud"))info.add("Entities: "+w.getEntities().size());'
+          fixed='if(enabled(mods,"entities_hud")){int loaded=0;for(var entity:w.getEntities())loaded++;info.add("Entities: "+loaded);}'
+          if bad in text:
+              p.write_text(text.replace(bad,fixed))
+          p=Path("ankhack/src/main/java/se/ankclient/Overlay.java")
+          text=p.read_text()
+          p.write_text(text.replace("AnkHack  v0.2","AnkHack  v0.3"))
+          PY
+          test -f ankhack/src/main/resources/fabric.mod.json
+      - name: Verify pure Java duplicate-matching logic
+        run: |
+          mkdir -p check
+          javac -d check ankhack/src/main/java/se/ankclient/FeatureKeys.java
+          printf '%s\n' 'import se.ankclient.FeatureKeys;' 'public class Verify { public static void main(String[] args) {' 'if (!FeatureKeys.canonical("Auto Totem").equals(FeatureKeys.canonical("AutoTotem"))) throw new AssertionError();' 'if (FeatureKeys.canonical("BoatFly").equals(FeatureKeys.canonical("Flight"))) throw new AssertionError();' '} }' > Verify.java
+          javac -cp check -d check Verify.java
+          java -cp check Verify
+      - name: Compile Fabric client
+        working-directory: ankhack
+        run: gradle --no-daemon --console=plain clean build
+      - name: Verify installable JAR metadata
+        run: |
+          test -s ankhack/build/libs/AnkHack-1.21.11-0.3.0.jar
+          unzip -p ankhack/build/libs/AnkHack-1.21.11-0.3.0.jar fabric.mod.json | grep -F '"id": "ankhack"'
+          unzip -p ankhack/build/libs/AnkHack-1.21.11-0.3.0.jar fabric.mod.json | grep -F '0.19.3'
+          ! jar tf ankhack/build/libs/AnkHack-1.21.11-0.3.0.jar | grep -q 'META-INF/jars/'
+      - name: Upload AnkHack 0.3 JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnkHack-Smart-1.21.11-Fabric-0.19.3
+          path: ankhack/build/libs/AnkHack-1.21.11-0.3.0.jar
+          if-no-files-found: error
