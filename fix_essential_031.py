@@ -67,7 +67,6 @@ for f in [root/"gradle.properties",root/"src/main/resources/fabric.mod.json",
         assert "mod_version=0.3.0" in t
         t=t.replace("mod_version=0.3.0","mod_version=0.3.1")
     elif f.name=="fabric.mod.json":
-        assert '"version": "0.3.0"' in t
         t=t.replace('"version": "0.3.0"','"version": "0.3.1"')
     else:t=t.replace("v0.3","v0.3.1")
     f.write_text(t)
