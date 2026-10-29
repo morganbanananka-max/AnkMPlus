@@ -45,6 +45,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
     private int restoreSlotAt;
     private UUID shieldTarget;
     private int shieldFirstClickAt = -1000;
+    private int explicitShieldArmedUntil = -1000;
 
     @Override
     public void onInitializeClient() {
@@ -69,6 +70,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
             // silently DISABLED it. V now arms/resets the combo instead.
             stunSlam = true;
             shieldTarget = null;
+            explicitShieldArmedUntil = ticks + 200;
             System.out.println("[AnkM+ manual 8.3] Stunslam armed: aim at raised shield, left-click Axe, left-click Mace");
         }
 
@@ -181,7 +183,11 @@ public final class AnkMPlusClient implements ClientModInitializer {
         boolean secondClick = self.shieldTarget != null &&
                 id.equals(self.shieldTarget) &&
                 self.ticks - self.shieldFirstClickAt <= 100;
-        boolean shieldUp = target.isUsingItem() && target.getUseItem().is(Items.SHIELD);
+        boolean raisedShield = target.isUsingItem() && target.getUseItem().is(Items.SHIELD);
+        boolean heldShield = target.getMainHandItem().is(Items.SHIELD) ||
+                target.getOffhandItem().is(Items.SHIELD);
+        boolean shieldUp = ManualCombatDecision.shieldCandidate(
+                raisedShield, heldShield, self.ticks <= self.explicitShieldArmedUntil);
 
         ManualCombatDecision.Action action = ManualCombatDecision.action(
                 self.maceSwap, self.stunSlam, shieldUp,
@@ -191,6 +197,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
             self.selectForManualClick(p, axe);
             self.shieldTarget = id;
             self.shieldFirstClickAt = self.ticks;
+            self.explicitShieldArmedUntil = -1000;
             // Keep the combo armed across hotbar restoration and the shield's
             // disabled animation. The user must click again to swing the Mace.
             System.out.println("[AnkM+ manual 8.3] Stunslam click 1: Axe");
