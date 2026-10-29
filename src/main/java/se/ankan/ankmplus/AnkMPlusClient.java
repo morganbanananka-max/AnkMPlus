@@ -60,7 +60,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
                 InputConstants.KEY_V, category));
 
         ClientTickEvents.END_CLIENT_TICK.register(this::tick);
-        System.out.println("[AnkM+ manual 8.3] loaded: B=real smash only, V=shield axe then mace");
+        System.out.println("[AnkM+ manual 8.3.1] loaded: B=real smash only, V=shield axe then mace");
     }
 
     private void tick(Minecraft mc) {
@@ -71,7 +71,7 @@ public final class AnkMPlusClient implements ClientModInitializer {
             stunSlam = true;
             shieldTarget = null;
             explicitShieldArmedUntil = ticks + 200;
-            System.out.println("[AnkM+ manual 8.3] Stunslam armed: aim at raised shield, left-click Axe, left-click Mace");
+            System.out.println("[AnkM+ manual 8.3.1] Stunslam armed: aim at raised shield, left-click Axe, left-click Mace");
         }
 
         LocalPlayer p = mc.player;
@@ -200,12 +200,12 @@ public final class AnkMPlusClient implements ClientModInitializer {
             self.explicitShieldArmedUntil = -1000;
             // Keep the combo armed across hotbar restoration and the shield's
             // disabled animation. The user must click again to swing the Mace.
-            System.out.println("[AnkM+ manual 8.3] Stunslam click 1: Axe");
+            System.out.println("[AnkM+ manual 8.3.1] Stunslam click 1: Axe");
         } else if (action == ManualCombatDecision.Action.MACE) {
             self.selectForManualClick(p, mace);
             if (secondClick) {
                 self.shieldTarget = null;
-                System.out.println("[AnkM+ manual 8.3] Stunslam click 2: Mace");
+                System.out.println("[AnkM+ manual 8.3.1] Stunslam click 2: Mace");
             }
         } else if (self.shieldTarget != null && !secondClick) {
             self.shieldTarget = null;
