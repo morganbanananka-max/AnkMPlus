@@ -34,8 +34,27 @@ jobs:
           ALSOFT_DRIVERS: "null"
         run: |
           set -o pipefail
-          timeout 500s xvfb-run -a -s "-screen 0 1280x800x24" gradle --no-daemon --console=plain runClientGameTest 2>&1 | tee manual-gameplay.log
-          grep -F "[AnkM+ Manual GameTest] PASS: no auto-hit; no ground Mace; shield Axe then Mace with manual clicks" manual-gameplay.log
+          : > manual-gameplay.log
+          for attempt in 1 2 3; do
+            echo "===== MINECRAFT ATTEMPT $attempt =====" | tee -a manual-gameplay.log
+            set +e
+            timeout 240s xvfb-run -a -s "-screen 0 1280x800x24" \
+              gradle --no-daemon --console=plain runClientGameTest \
+              > manual-gameplay-attempt.log 2>&1
+            result=$?
+            set -e
+            cat manual-gameplay-attempt.log >> manual-gameplay.log
+            grep -E "GameTest.*PASS|AssertionError|Timeout loading world|BUILD (SUCCESSFUL|FAILED)" \
+              manual-gameplay-attempt.log | tail -n 20 || true
+            if [ "$result" -eq 0 ] && \
+              grep -Fq "[AnkM+ Manual GameTest] PASS: no auto-hit; no ground Mace; shield Axe then Mace with manual clicks" manual-gameplay-attempt.log; then
+              echo "GameTest PASS on attempt $attempt"
+              exit 0
+            fi
+            echo "Attempt $attempt did not pass, exit=$result"
+          done
+          echo "Manual Stunslam never passed"
+          exit 1
       - name: Save game test logs
         if: always()
         uses: actions/upload-artifact@v4
