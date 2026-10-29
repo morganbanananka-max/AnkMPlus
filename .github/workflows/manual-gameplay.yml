@@ -29,9 +29,12 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb libgl1-mesa-dri libglu1-mesa
       - name: Run actual 1.21.11 manual shield tests
         shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          ALSOFT_DRIVERS: "null"
         run: |
           set -o pipefail
-          timeout 500s gradle --no-daemon --console=plain runClientGameTest 2>&1 | tee manual-gameplay.log
+          timeout 500s xvfb-run -a -s "-screen 0 1280x800x24" gradle --no-daemon --console=plain runClientGameTest 2>&1 | tee manual-gameplay.log
           grep -F "[AnkM+ Manual GameTest] PASS: no auto-hit; no ground Mace; shield Axe then Mace with manual clicks" manual-gameplay.log
       - name: Save game test logs
         if: always()
