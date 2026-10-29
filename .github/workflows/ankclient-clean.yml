@@ -26,6 +26,19 @@ jobs:
           mkdir -p ankclient
           base64 --decode ankclient-source.tar.gz.b64 | tar -xz -C ankclient
           test -f ankclient/src/main/resources/fabric.mod.json
+      - name: Target Fabric Loader 0.19.3
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("ankclient/gradle.properties")
+          source = p.read_text()
+          assert "loader_version=0.19.5" in source
+          p.write_text(source.replace("loader_version=0.19.5", "loader_version=0.19.3"))
+          p = Path("ankclient/src/main/resources/fabric.mod.json")
+          source = p.read_text()
+          assert '">=0.19.5"' in source
+          p.write_text(source.replace('">=0.19.5"', '">=0.19.3"'))
+          PY
       - name: Correct Minecraft 1.21.11 armor API
         run: |
           python3 - <<'PY'
