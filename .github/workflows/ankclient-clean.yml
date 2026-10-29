@@ -26,6 +26,17 @@ jobs:
           mkdir -p ankclient
           base64 --decode ankclient-source.tar.gz.b64 | tar -xz -C ankclient
           test -f ankclient/src/main/resources/fabric.mod.json
+      - name: Correct Minecraft 1.21.11 armor API
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("ankclient/src/main/java/se/ankclient/Overlay.java")
+          text = p.read_text()
+          old = "for(ItemStack armor:mc.player.getArmorItems()) {"
+          new = "for (net.minecraft.entity.EquipmentSlot slot : new net.minecraft.entity.EquipmentSlot[] {net.minecraft.entity.EquipmentSlot.HEAD, net.minecraft.entity.EquipmentSlot.CHEST, net.minecraft.entity.EquipmentSlot.LEGS, net.minecraft.entity.EquipmentSlot.FEET}) {\n                ItemStack armor = mc.player.getEquippedStack(slot);"
+          assert old in text
+          p.write_text(text.replace(old, new))
+          PY
       - name: Compile and remap installable Fabric JAR
         working-directory: ankclient
         run: gradle --no-daemon --console=plain clean build
