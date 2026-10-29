@@ -73,17 +73,29 @@ public final class ManualClickGameTest implements FabricClientGameTest {
             // Simulate opponent actively blocking with a shield on the client.
             // This calls the SAME beforeManualClick invoked by the vanilla
             // click mixin, but does not generate any artificial attacks.
-            boolean firstAxe = ctx.computeOnClient(mc -> {
+            String firstAxe = ctx.computeOnClient(mc -> {
                 var p = mc.player;
                 var target = steve(mc);
                 p.getInventory().setSelectedSlot(0);
                 target.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.SHIELD));
                 target.startUsingItem(InteractionHand.OFF_HAND);
+                boolean raised = target.isUsingItem();
+                boolean itemShield = target.getUseItem().is(Items.SHIELD);
+                boolean lineOfSight = p.hasLineOfSight(target);
+                boolean actualAxe = p.getInventory().getItem(1).getItem() instanceof net.minecraft.world.item.AxeItem;
+                boolean actualMace = p.getInventory().getItem(2).is(Items.MACE);
                 mc.hitResult = new EntityHitResult(target);
                 AnkMPlusClient.beforeManualClick(mc);
-                return p.getInventory().getSelectedSlot() == 1;
+                return "slot=" + p.getInventory().getSelectedSlot()
+                        + " raised=" + raised
+                        + " shield=" + itemShield
+                        + " LoS=" + lineOfSight
+                        + " axe=" + actualAxe
+                        + " mace=" + actualMace
+                        + " target=" + target.getName().getString();
             });
-            if (!firstAxe) throw new AssertionError("Stunslam click 1 did not choose Axe");
+            if (!firstAxe.startsWith("slot=1 "))
+                throw new AssertionError("Stunslam click 1 did not choose Axe: " + firstAxe);
 
             // Target's shield is now stunned/lowered. Follow-up MUST choose
             // Mace even on flat ground, since this is the shield-combo exception.
