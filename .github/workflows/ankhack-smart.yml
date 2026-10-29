@@ -33,6 +33,9 @@ jobs:
           fixed='if(enabled(mods,"entities_hud")){int loaded=0;for(var entity:w.getEntities())loaded++;info.add("Entities: "+loaded);}'
           if bad in text:
               p.write_text(text.replace(bad,fixed))
+          p=Path("ankhack/src/main/java/se/ankclient/ExtraFeatures.java")
+          text=p.read_text()
+          p.write_text(text.replace('            {"ping_hud","Ping","Connection round-trip time","HUD"},\\n',''))
           p=Path("ankhack/src/main/java/se/ankclient/Overlay.java")
           text=p.read_text()
           p.write_text(text.replace("AnkHack  v0.2","AnkHack  v0.3"))
