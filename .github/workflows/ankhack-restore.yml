@@ -1,0 +1,52 @@
+name: Build AnkHack Restored UI 0.3.2
+on:
+  push:
+    branches: [ankhack-restore-gui-032]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.1'
+      - name: Restore AnkHack source and previous Essential hotfix
+        run: |
+          set -euo pipefail
+          mkdir -p ankhack
+          base64 -d ankhack-source.tar.gz.b64 | tar -xz -C ankhack
+          cat ankhack-v03.part1 ankhack-v03.part2 ankhack-v03.part3 | base64 -d | tar -xJ -C ankhack
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("ankhack/src/main/java/se/ankclient/ExtraOverlay.java")
+          s=p.read_text()
+          s=s.replace('if(enabled(mods,"entities_hud"))info.add("Entities: "+w.getEntities().size());',
+                      'if(enabled(mods,"entities_hud")){int loaded=0;for(var entity:w.getEntities())loaded++;info.add("Entities: "+loaded);}')
+          p.write_text(s)
+          p=Path("ankhack/src/main/java/se/ankclient/ExtraFeatures.java")
+          s=p.read_text().replace('            {"ping_hud","Ping","Connection round-trip time","HUD"},\n','')
+          p.write_text(s)
+          PY
+          python3 fix_essential_031.py
+          cp restore/ClickGuiScreen.java ankhack/src/main/java/se/ankclient/ClickGuiScreen.java
+          sed -i 's/mod_version=0.3.1/mod_version=0.3.2/' ankhack/gradle.properties
+      - name: Compile and remap Fabric mod
+        working-directory: ankhack
+        run: gradle --no-daemon --console=plain clean build
+      - name: Verify base JAR
+        run: |
+          test -s ankhack/build/libs/AnkHack-1.21.11-0.3.2.jar
+          unzip -p ankhack/build/libs/AnkHack-1.21.11-0.3.2.jar fabric.mod.json | grep -F '"id": "ankhack"'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnkHack-0.3.2-Base
+          path: ankhack/build/libs/AnkHack-1.21.11-0.3.2.jar
+          if-no-files-found: error
