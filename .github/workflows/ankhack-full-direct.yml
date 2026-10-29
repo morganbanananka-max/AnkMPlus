@@ -22,6 +22,11 @@ jobs:
           run-id: 40971460979
           github-token: ${{ github.token }}
           path: core
+      - name: Use Java 25 for Wurst source build
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
       - name: Build official Wurst 7.56.1 for Minecraft 1.21.11
         run: |
           git clone --depth 1 --branch v7.56.1-MC1.21.11 https://github.com/Wurst-Imperium/Wurst7.git upstream-wurst
