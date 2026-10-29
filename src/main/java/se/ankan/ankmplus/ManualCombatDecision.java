@@ -20,6 +20,16 @@ public final class ManualCombatDecision {
                 && fallDistance > 1.5;
     }
 
+    /**
+     * V explicitly arms a shield combo even if remote item-use animation is
+     * not synchronized yet. Never infer a shield from a bare-handed target.
+     */
+    public static boolean shieldCandidate(boolean activelyBlocking,
+                                           boolean holdingShield,
+                                           boolean explicitVArmed) {
+        return activelyBlocking || (explicitVArmed && holdingShield);
+    }
+
     public static Action action(boolean maceSwap, boolean stunSlam,
                                 boolean shieldUp, boolean pendingSecondClick,
                                 boolean validSmash, boolean hasAxe,
