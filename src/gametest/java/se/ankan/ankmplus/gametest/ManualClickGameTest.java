@@ -5,7 +5,6 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -78,20 +77,21 @@ public final class ManualClickGameTest implements FabricClientGameTest {
                 var target = steve(mc);
                 p.getInventory().setSelectedSlot(0);
                 target.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.SHIELD));
-                target.startUsingItem(InteractionHand.OFF_HAND);
-                // Zombies are not player AI and do not automatically raise
-                // a shield. Simulate the same synchronized "using item" flag
-                // an actual blocking player sends to the client.
+                // Explicit V-arm is required when the opponent merely holds
+                // a shield, so delayed shield-use synchronization cannot break
+                // the combo. Simulate the V key's state here.
                 try {
-                    var field = LivingEntity.class.getDeclaredField("DATA_LIVING_ENTITY_FLAGS");
-                    field.setAccessible(true);
-                    @SuppressWarnings("unchecked")
-                    net.minecraft.network.syncher.EntityDataAccessor<Byte> flags =
-                            (net.minecraft.network.syncher.EntityDataAccessor<Byte>) field.get(null);
-                    byte value = target.getEntityData().get(flags);
-                    target.getEntityData().set(flags, (byte) (value | 1));
+                    var cls = AnkMPlusClient.class;
+                    var instanceField = cls.getDeclaredField("instance");
+                    instanceField.setAccessible(true);
+                    Object mod = instanceField.get(null);
+                    var timeField = cls.getDeclaredField("ticks");
+                    timeField.setAccessible(true);
+                    var armedField = cls.getDeclaredField("explicitShieldArmedUntil");
+                    armedField.setAccessible(true);
+                    armedField.setInt(mod, timeField.getInt(mod) + 100);
                 } catch (ReflectiveOperationException e) {
-                    throw new AssertionError("Cannot emulate genuine shield-use state", e);
+                    throw new AssertionError("Cannot arm V for test", e);
                 }
                 boolean raised = target.isUsingItem();
                 boolean itemShield = target.getUseItem().is(Items.SHIELD);
@@ -116,12 +116,17 @@ public final class ManualClickGameTest implements FabricClientGameTest {
             boolean secondMace = ctx.computeOnClient(mc -> {
                 var p = mc.player;
                 var target = steve(mc);
-                target.stopUsingItem();
+                // The shield need not remain raised after the Axe swing.
                 mc.hitResult = new EntityHitResult(target);
                 AnkMPlusClient.beforeManualClick(mc);
                 return p.getInventory().getSelectedSlot() == 2;
             });
             if (!secondMace) throw new AssertionError("Stunslam click 2 did not choose Mace");
+            ctx.waitTicks(8);
+            boolean restored = ctx.computeOnClient(mc ->
+                    mc.player.getInventory().getSelectedSlot() == 0);
+            if (!restored)
+                throw new AssertionError("Previous hotbar selection was not restored after Stunslam");
             System.out.println("[AnkM+ Manual GameTest] PASS: no auto-hit; no ground Mace; shield Axe then Mace with manual clicks");
         }
     }
