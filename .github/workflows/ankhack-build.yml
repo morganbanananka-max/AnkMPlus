@@ -1,0 +1,38 @@
+name: Build AnkHack Fabric 1.21.11
+on:
+  push:
+    branches: [ankhack-v02-build]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.1'
+      - name: Unpack AnkHack clean source
+        run: |
+          mkdir -p ankhack
+          base64 --decode ankhack-source.tar.gz.b64 | tar -xz -C ankhack
+          test -f ankhack/src/main/resources/fabric.mod.json
+      - name: Compile
+        working-directory: ankhack
+        run: gradle --no-daemon --console=plain clean build
+      - name: Inspect built artifact
+        run: |
+          ls -lh ankhack/build/libs
+          test -s ankhack/build/libs/AnkHack-1.21.11-0.2.0.jar
+      - name: Upload JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnkHack-1.21.11-original-module
+          path: ankhack/build/libs/AnkHack-1.21.11-0.2.0.jar
+          if-no-files-found: error
