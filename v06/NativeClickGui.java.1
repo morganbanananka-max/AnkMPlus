@@ -1,0 +1,109 @@
+package se.ankclient;
+
+import java.util.*;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.gui.widget.TextFieldWidget;
+import net.minecraft.text.Text;
+
+/** One client, one module registry, one fully drawn interface. */
+public final class NativeClickGui extends Screen {
+    static final int BASE=0xFF080B11,HEAD=0xFF101722,PANEL=0xFF131D29,CARD=0xFF1A2736,
+        HOVER=0xFF28394D,BORDER=0xFF2B394C,YELLOW=0xFFFFCF44,GOLD=0xFFDEAA35,
+        TEXT=0xFFF2F5FB,GRAY=0xFF8FA3BA,GREEN=0xFF61DB9F;
+    private final String[] cats={"ALL","COMBAT","MOVEMENT","RENDER","WORLD","AUTOMATION","UTILITY","HUD"};
+    private final String[] labels={"All hacks","Combat","Movement","Visuals","World","Automation","Utility","HUD tools"};
+    private final String[] profiles={"Default","PvP","Build","Explore","Singleplayer"};
+    private String category="ALL",query="",profile="Default",chosen="";
+    private int x,y,w,h,sidebar,listX,listW,detailX,detailW,rowY,rows,page;
+    private boolean compact;
+    private TextFieldWidget search;
+    private List<Module> matches=List.of(),visible=List.of();
+    private Module selected;
+    public NativeClickGui(){super(Text.literal("AnkHack"));}
+    private void click(int xx,int yy,int ww,int hh,Runnable handler){
+        if(ww<8||hh<8)return;
+        ButtonWidget b=ButtonWidget.builder(Text.empty(),btn->handler.run()).dimensions(xx,yy,ww,hh).build();
+        b.setAlpha(0f);addDrawableChild(b);
+    }
+    private boolean readout(Module m){
+        return m.category==Module.Category.HUD || m.id.endsWith("_hud")
+            || Set.of("mace_ready","shield_watch","player_radar","target_info",
+             "radar","compass_radar","exposed_ore","block_memory","auto_pickup","enemy_alert",
+             "session_clock").contains(m.id);
+    }
+    private void relist(){
+        List<Module> result=new ArrayList<>();
+        String q=query.strip().toLowerCase(Locale.ROOT);
+        for(Module m:AnkHack.MODULES.all()){
+            if(category.equals("HUD") != readout(m))continue;
+            if(!category.equals("HUD")&&!category.equals("ALL")&&!category.equals(m.category.name()))continue;
+            if(!q.isEmpty() && !(m.name+" "+m.description+" "+m.id).toLowerCase(Locale.ROOT).contains(q))continue;
+            result.add(m);
+        }
+        result.sort(Comparator.comparing((Module m)->m.name.toLowerCase(Locale.ROOT)));
+        matches=result;
+        page=Math.max(0,Math.min(page,Math.max(0,(result.size()-1)/rows)));
+        int a=Math.min(page*rows,result.size());
+        visible=result.subList(a,Math.min(result.size(),a+rows));
+        selected=null;
+        for(Module m:result)if(m.id.equals(chosen)){selected=m;break;}
+        if(selected==null&&!visible.isEmpty()){selected=visible.get(0);chosen=selected.id;}
+    }
+    private Module at(int i){return i<visible.size()?visible.get(i):null;}
+    @Override protected void init(){
+        w=Math.min(width-24,1110);h=Math.min(height-24,700);
+        x=(width-w)/2;y=(height-h)/2;
+        compact=w<770;sidebar=compact?120:164;detailW=compact?0:Math.min(260,Math.max(220,w/4));
+        listX=x+sidebar+19;listW=w-sidebar-detailW-34;detailX=listX+listW+10;
+        rowY=y+172;rows=Math.max(2,(h-240)/51);
+        search=new TextFieldWidget(textRenderer,listX+19,y+109,Math.max(65,listW-39),26,Text.literal("Search hacks"));
+        search.setMaxLength(80);search.setText(query);search.setSuggestion("Search hacks as you type...");
+        search.setChangedListener(value->{query=value;page=0;relist();});
+        addDrawableChild(search);relist();
+        for(int i=0;i<cats.length;i++){
+            String dest=cats[i];int yy=y+144+i*40;
+            if(yy+35>y+h-132)break;
+            click(x+19,yy,sidebar-27,34,()->{category=dest;page=0;chosen="";relist();});
+        }
+        for(int i=0;i<rows;i++){
+            int index=i,yy=rowY+i*51;
+            click(listX+16,yy,listW-107,45,()->{Module m=at(index);if(m!=null){chosen=m.id;relist();}});
+            click(listX+listW-83,yy+10,66,26,()->{Module m=at(index);if(m!=null){m.toggle();chosen=m.id;relist();}});
+        }
+        click(listX+16,y+h-51,34,28,()->{page=Math.max(0,page-1);relist();});
+        click(listX+56,y+h-51,34,28,()->{page++;relist();});
+        click(x+w-48,y+19,28,28,this::close);
+        for(int i=0;i<profiles.length;i++){
+            String p=profiles[i];int py=y+h-104+i*19;
+            if(py+18<y+h-6)click(x+16,py,sidebar-24,18,()->profile=p);
+        }
+        if(!compact){
+            click(detailX+13,y+220,detailW-31,34,()->{if(selected!=null)selected.toggle();});
+            int i=0;
+            for(NativeOptions.Option opt:NativeOptions.all()){
+                if(i>=4)break;
+                int yy=y+336+i*50;
+                click(detailX+detailW-76,yy+10,24,23,
+                    ()->NativeOptions.set(opt.key(),NativeOptions.get(opt.key())-opt.step()));
+                click(detailX+detailW-46,yy+10,24,23,
+                    ()->NativeOptions.set(opt.key(),NativeOptions.get(opt.key())+opt.step()));
+                i++;
+            }
+            click(detailX+14,y+h-92,detailW-31,28,()->NativeProfiles.save(profile));
+            click(detailX+14,y+h-57,detailW-31,28,()->{NativeProfiles.load(profile);relist();});
+        }
+    }
+    private void fill(DrawContext d,int xx,int yy,int ww,int hh,int color){if(ww>0&&hh>0)d.fill(xx,yy,xx+ww,yy+hh,color);}
+    private void round(DrawContext d,int xx,int yy,int ww,int hh,int color){
+        if(ww<9||hh<9){fill(d,xx,yy,ww,hh,color);return;}
+        fill(d,xx+5,yy,ww-10,hh,color);
+        fill(d,xx+2,yy+2,ww-4,hh-4,color);
+        fill(d,xx+1,yy+4,ww-2,hh-8,color);
+        fill(d,xx,yy+6,ww,hh-12,color);
+    }
+    private void label(DrawContext d,String value,int xx,int yy,int col){
+        d.drawTextWithShadow(textRenderer,Text.literal(value),xx,yy,col);
+    }
+    private String clip(String s,int limit){return s.length()>limit?s.substring(0,Math.max(0,limit-2))+"..":s;}
