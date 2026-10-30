@@ -36,6 +36,10 @@ jobs:
           assert 'Overlay.render(' in s
           s=s.replace('Overlay.render(', 'OverlayLite.render(')
           p.write_text(s)
+          p=Path('ankhack/src/main/java/se/ankclient/PortedFeatures.java')
+          s=p.read_text().replace('import net.minecraft.item.SwordItem;', 'import net.minecraft.registry.tag.ItemTags;')
+          s=s.replace('stack.getItem() instanceof SwordItem', 'stack.isIn(ItemTags.SWORDS)')
+          p.write_text(s)
           p=Path('ankhack/gradle.properties')
           s=p.read_text().replace('mod_version=0.5.0','mod_version=0.6.0')
           p.write_text(s)
