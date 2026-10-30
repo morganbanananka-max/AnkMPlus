@@ -64,11 +64,11 @@ jobs:
         working-directory: upstream
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.18 clean build -x test
+          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.19 clean build -x test
       - name: Finalize first-level pathfinder library for Fabric
         run: |
           python3 unified/finalize_baritone_113.py
-          test -s upstream/build/libs/AnkHack-Unified-1.21.11-1.0.18.jar
+          test -s upstream/build/libs/AnkHack-Unified-1.21.11-1.0.19.jar
       - name: Verify real compiled module variants
         run: |
           set -euo pipefail
@@ -126,9 +126,9 @@ jobs:
           unzip -p "$JAR" fabric.mod.json | grep -F 'nether-pathfinder-1.4.1.jar'
           test "$(jar tf "$JAR" | grep -c 'meteordevelopment/meteorclient/systems/modules/movement/Flight.class')" -eq 1
           ! jar tf "$JAR" | grep -Eq 'META-INF/jars/.*(wurst|liquidbounce|thunderhack|meteor-client)'
-          cp "$JAR" AnkHack-Unified-1.0.18-Fabric-1.21.11.jar
+          cp "$JAR" AnkHack-Unified-1.0.19-Fabric-1.21.11.jar
           cat > WHAT_IS_IMPLEMENTED.txt <<'EOF'
-          AnkHack 1.0.18
+          AnkHack 1.0.19
           - Meteor original codebase and modules
           - Wurst-based BoatFly and Flight variant
           - Wurst-derived bobber motion option in AutoFish
@@ -157,8 +157,8 @@ jobs:
           Regtest: all six native gameplay modules are instantiated once by AnkHack registry.
           NO gameplay test has been performed in Minecraft.
           EOF
-          tar --exclude=.git --exclude=.gradle --exclude=build -czf AnkHack-Unified-1.0.18-SOURCE.tar.gz -C upstream .
-          ls -lh AnkHack-Unified-1.0.18-Fabric-1.21.11.jar
+          tar --exclude=.git --exclude=.gradle --exclude=build -czf AnkHack-Unified-1.0.19-SOURCE.tar.gz -C upstream .
+          ls -lh AnkHack-Unified-1.0.19-Fabric-1.21.11.jar
       - name: Verify actual game launch and capture non-empty GUI
         timeout-minutes: 8
         working-directory: upstream
@@ -172,7 +172,7 @@ jobs:
           sleep 3
           # Loom sometimes starts an additional Xvfb server. Search the server
           # actually hosting Minecraft rather than grabbing an empty :98 screen.
-          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.18 runClient > ../ankhack-client-smoke.log 2>&1 &
+          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.19 runClient > ../ankhack-client-smoke.log 2>&1 &
           CLIENT_PID=$!
           found=""
           target=""
@@ -240,13 +240,24 @@ jobs:
             sleep 1
             DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool click 1 || true
           fi
-          sleep 3
-          # The first-run accessibility dialog occasionally only receives
-          # mouse focus, not activation. Return activates its Continue button.
-          DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool key --clearmodifiers Return || true
-          sleep 5
-          DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool key --clearmodifiers Shift_R || true
-          sleep 5
+          # The first-run accessibility dialog may be unresponsive while
+          # textures finish loading. Retry the Continue click and GUI binding
+          # instead of treating a welcome-screen screenshot as a mod failure.
+          for trial in 1 2 3; do
+            sleep 3
+            if test -n "$WIDTH" && test -n "$HEIGHT"; then
+              DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool mousemove --sync --window "$found" "$((WIDTH/2))" "$((HEIGHT*93/100))" || true
+              DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool click 1 || true
+            fi
+            DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool key --clearmodifiers Return || true
+            sleep 4
+            DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool key --clearmodifiers Shift_R || true
+            sleep 2
+            if grep -qF '[AnkHack] ClickGUI modules screen initialized' ../ankhack-client-smoke.log; then
+              echo "ClickGUI opened on interaction trial $trial"
+              break
+            fi
+          done
           DISPLAY="$target" XAUTHORITY="$xauth_file" import -window "$WINDOW_ID" ../AnkHack-after-right-shift.png || true
           if test -s ../AnkHack-after-right-shift.png; then
             identify ../AnkHack-after-right-shift.png
@@ -263,7 +274,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: AnkHack-1.0.18-GUI-SMOKE-DEBUG
+          name: AnkHack-1.0.19-GUI-SMOKE-DEBUG
           path: |
             AnkHack-GUI-virtual-display.png
             AnkHack-Minecraft-startup.png
@@ -277,13 +288,13 @@ jobs:
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
-          name: AnkHack-1.0.18-DEVELOPMENT-ONLY
+          name: AnkHack-1.0.19-DEVELOPMENT-ONLY
           path: |
-            AnkHack-Unified-1.0.18-Fabric-1.21.11.jar
+            AnkHack-Unified-1.0.19-Fabric-1.21.11.jar
             WHAT_IS_IMPLEMENTED.txt
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
-          name: AnkHack-1.0.18-GPL-Source
-          path: AnkHack-Unified-1.0.18-SOURCE.tar.gz
+          name: AnkHack-1.0.19-GPL-Source
+          path: AnkHack-Unified-1.0.19-SOURCE.tar.gz
           if-no-files-found: error
