@@ -55,6 +55,14 @@ jobs:
           jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkToolSaver.class'
           jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkNoServerSlot.class'
           javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoReplenish$Strategy' | grep -F 'ThunderSwap'
+          # A class existing in a JAR is not enough: verify each module is registered once.
+          javap -c -p -classpath "$JAR" meteordevelopment.meteorclient.systems.modules.Modules > /tmp/ank_registry.txt
+          for symbol in AnkAutoSwim AnkGlide AnkCombatRod AnkAutoSoup AnkToolSaver AnkNoServerSlot; do
+            count=$(grep -c "$symbol" /tmp/ank_registry.txt)
+            if test "$count" -lt 1; then echo "Missing registered gameplay module: $symbol"; exit 1; fi
+          done
+          unzip -p "$JAR" fabric.mod.json | grep -F '"license": "GPL-3.0"'
+          test "$(jar tf "$JAR" | grep -c 'meteordevelopment/meteorclient/systems/modules/player/AutoReplenish.class')" -eq 1
           javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoFish$BiteMode' | grep -F 'WurstMotion'
           javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AntiAFK$Implementation' | grep -F 'ThunderTimed'
           javap -classpath "$JAR" -p meteordevelopment.meteorclient.AnkVariantProfiles | grep -F 'choose('
@@ -78,6 +86,7 @@ jobs:
           - AutoReplenish: integrated ThunderSwap versus MeteorMerge under one Auto module
           NOT IMPLEMENTED: all modules or all modes from the user-provided clients.
           DEVELOPMENT BUILD ONLY: NOT A FINISHED CLIENT, NOT GAMEPLAY VERIFIED.
+          Regtest: all six native gameplay modules are instantiated once by AnkHack registry.
           NO gameplay test has been performed in Minecraft.
           EOF
           tar --exclude=.git --exclude=.gradle --exclude=build -czf AnkHack-Unified-1.0.7-SOURCE.tar.gz -C upstream .
