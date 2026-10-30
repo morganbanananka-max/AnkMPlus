@@ -172,7 +172,7 @@ jobs:
             fi
             # Fabric Loom runs Minecraft under xvfb-run, with a private Xauthority.
             # Identify the real display and cookie from the child Xvfb process.
-            xauth_file=$(ps -eo args | sed -nE 's/.*Xvfb :[0-9]+ .* -auth ([^ ]+).*/\\1/p' | head -1 || true)
+            xauth_file=$(ps -eo args | sed -nE 's/.*Xvfb :[0-9]+ .* -auth ([^ ]+).*/\1/p' | head -1 || true)
             for display in :98 :99 :100 :101 :102 :103 :104 :105; do
               if test -n "$xauth_file"; then
                 id=$(DISPLAY="$display" XAUTHORITY="$xauth_file" xdotool search --onlyvisible --name 'Minecraft|AnkHack|1.21.11' 2>/dev/null | head -1 || true)
