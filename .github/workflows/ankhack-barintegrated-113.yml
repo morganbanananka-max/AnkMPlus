@@ -221,8 +221,8 @@ jobs:
           # as verified just because the startup window contains colors.
           DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool windowfocus "$found" || true
           GEOM=$(DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool getwindowgeometry --shell "$found" || true)
-          WIDTH=$(printf '%s\\n' "$GEOM" | sed -nE 's/^WIDTH=([0-9]+)$/\\1/p')
-          HEIGHT=$(printf '%s\\n' "$GEOM" | sed -nE 's/^HEIGHT=([0-9]+)$/\\1/p')
+          WIDTH=$(printf '%s\n' "$GEOM" | sed -nE 's/^WIDTH=([0-9]+)$/\1/p')
+          HEIGHT=$(printf '%s\n' "$GEOM" | sed -nE 's/^HEIGHT=([0-9]+)$/\1/p')
           if test -n "$WIDTH" && test -n "$HEIGHT"; then
             DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool mousemove --window "$found" "$((WIDTH/2))" "$((HEIGHT*93/100))" click 1 || true
           fi
