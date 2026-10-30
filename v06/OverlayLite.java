@@ -16,7 +16,7 @@ public final class OverlayLite {
             List<Module> active=new ArrayList<>();
             for(Module m:manager.all())if(m.enabled()&&m.category!=Module.Category.HUD
                 &&!m.id.endsWith("_hud")&&!Set.of("mace_ready","shield_watch","player_radar","target_info").contains(m.id))active.add(m);
-            int rx=d.getScaledWindowWidth()-12;
+            int rx=mc.getWindow().getScaledWidth()-12;
             for(int i=0;i<Math.min(16,active.size());i++){
                 String s=active.get(i).name;
                 int ww=mc.textRenderer.getWidth(s);
