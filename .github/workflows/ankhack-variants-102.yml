@@ -1,0 +1,63 @@
+name: Build AnkHack 1.0.2 Native Variant Engine
+on:
+  push:
+    branches: [ankhack-variant-engine-102]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Load pinned Minecraft 1.21.11 client source
+        run: |
+          git clone https://github.com/MeteorDevelopment/meteor-client.git upstream
+          cd upstream
+          git checkout 02973974afdfb715b193813959a837695049f7c1
+          test "$(git rev-parse HEAD)" = "02973974afdfb715b193813959a837695049f7c1"
+      - name: Integrate all existing native AnkHack functionality
+        run: |
+          python3 unified/patch_unified.py
+          python3 unified/patch_flight_variants.py
+          test -s upstream/src/main/java/meteordevelopment/meteorclient/AnkVariantProfiles.java
+          grep -F 'WurstMotion' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/movement/Flight.java
+          grep -F 'Auto' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/movement/Flight.java
+      - name: Compile Minecraft 1.21.11 Fabric mod
+        working-directory: upstream
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.2 clean build -x test
+      - name: Verify one module and compiled variant selector
+        run: |
+          set -euo pipefail
+          JAR=$(find upstream/build/libs -maxdepth 1 -name 'AnkHack-Unified-*.jar' ! -name '*-sources.jar' ! -name '*-dev.jar' ! -name '*-javadoc.jar' | head -1)
+          test -s "$JAR"
+          unzip -p "$JAR" fabric.mod.json | grep -F '"id": "ankhack"'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/AnkVariantProfiles.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/Flight.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/Flight$Mode.class'
+          javap -classpath "$JAR" -p meteordevelopment.meteorclient.AnkVariantProfiles | grep -F 'choose('
+          javap -classpath "$JAR" -p meteordevelopment.meteorclient.systems.modules.movement.Flight | grep -F 'selectedMode()'
+          ! jar tf "$JAR" | grep -Eq 'META-INF/jars/.*(wurst|meteor-client|liquidbounce|thunderhack)'
+          cp "$JAR" AnkHack-Unified-1.0.2-Fabric-1.21.11.jar
+          echo "AnkHack Flight variants: Auto, Meteor Abilities, Meteor Velocity, WurstMotion. Auto choice is based on locally observed stable intervals versus server position corrections. No guarantees for server flight policies. Not all source clients are yet integrated." > LIMITATIONS.txt
+          tar --exclude=.git --exclude=.gradle --exclude=build -czf AnkHack-Unified-1.0.2-SOURCE.tar.gz -C upstream .
+          du -h AnkHack-Unified-1.0.2-Fabric-1.21.11.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnkHack-1.0.2-Flight-Variant-Selection
+          path: |
+            AnkHack-Unified-1.0.2-Fabric-1.21.11.jar
+            LIMITATIONS.txt
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnkHack-1.0.2-Full-GPL-Source
+          path: AnkHack-Unified-1.0.2-SOURCE.tar.gz
+          if-no-files-found: error
