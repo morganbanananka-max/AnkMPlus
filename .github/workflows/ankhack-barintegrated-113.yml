@@ -42,6 +42,7 @@ jobs:
           python3 unified/patch_extra_thunder_native_114.py
           python3 unified/patch_autoarmor_114.py
           python3 unified/patch_gui_responsive_115.py
+          python3 unified/patch_extra_thunder_native_118.py
           # Fully reproducible library source: exact official Baritone 1.21.11
           # artifact with the same SHA256 as the user-supplied JAR.
           mkdir -p upstream/libs
@@ -63,11 +64,11 @@ jobs:
         working-directory: upstream
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.17 clean build -x test
+          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.18 clean build -x test
       - name: Finalize first-level pathfinder library for Fabric
         run: |
           python3 unified/finalize_baritone_113.py
-          test -s upstream/build/libs/AnkHack-Unified-1.21.11-1.0.17.jar
+          test -s upstream/build/libs/AnkHack-Unified-1.21.11-1.0.18.jar
       - name: Verify real compiled module variants
         run: |
           set -euo pipefail
@@ -107,10 +108,13 @@ jobs:
           jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkAntiAttack.class'
           jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkDurabilityAlert.class'
           jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkElytraRecast.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/misc/AnkAutoDuel.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkElytraReplace.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkNoServerRotate.class'
           javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.movement.FastClimb$Implementation' | grep -F 'WurstClassic'
           # A class existing in a JAR is not enough: verify each module is registered once.
           javap -c -p -classpath "$JAR" meteordevelopment.meteorclient.systems.modules.Modules > /tmp/ank_registry.txt
-          for symbol in AnkAutoSwim AnkGlide AnkCombatRod AnkAutoSoup AnkToolSaver AnkNoServerSlot AnkViewLock AnkAntiBadEffects AnkLevitationControl AnkJetpack AnkAntiAttack AnkDurabilityAlert AnkElytraRecast; do
+          for symbol in AnkAutoSwim AnkGlide AnkCombatRod AnkAutoSoup AnkToolSaver AnkNoServerSlot AnkViewLock AnkAntiBadEffects AnkLevitationControl AnkJetpack AnkAntiAttack AnkDurabilityAlert AnkElytraRecast AnkAutoDuel AnkElytraReplace AnkNoServerRotate; do
             count=$(grep -c "$symbol" /tmp/ank_registry.txt)
             if test "$count" -lt 1; then echo "Missing registered gameplay module: $symbol"; exit 1; fi
           done
@@ -122,9 +126,9 @@ jobs:
           unzip -p "$JAR" fabric.mod.json | grep -F 'nether-pathfinder-1.4.1.jar'
           test "$(jar tf "$JAR" | grep -c 'meteordevelopment/meteorclient/systems/modules/movement/Flight.class')" -eq 1
           ! jar tf "$JAR" | grep -Eq 'META-INF/jars/.*(wurst|liquidbounce|thunderhack|meteor-client)'
-          cp "$JAR" AnkHack-Unified-1.0.17-Fabric-1.21.11.jar
+          cp "$JAR" AnkHack-Unified-1.0.18-Fabric-1.21.11.jar
           cat > WHAT_IS_IMPLEMENTED.txt <<'EOF'
-          AnkHack 1.0.17
+          AnkHack 1.0.18
           - Meteor original codebase and modules
           - Wurst-based BoatFly and Flight variant
           - Wurst-derived bobber motion option in AutoFish
@@ -145,7 +149,7 @@ jobs:
           - GUI: dark gold widgets, larger readable rows, interactive ON/OFF indicators
           - GUI: low-resolution category height limits, functional scroll views, no overlapping help
           - Wurst Jetpack integrated natively; FastClimb has MeteorModern/WurstClassic/Auto
-          - ThunderHack-derived AntiAttack, DurabilityAlert, ElytraRecast native gameplay modules
+          - ThunderHack-derived AntiAttack, DurabilityAlert, ElytraRecast, AutoDuel, ElytraReplace, NoServerRotate native gameplay modules
           - Baritone: genuine 1.21.11 LGPL navigation library integrated within the single installable JAR (separable internal mod library)
           - ViewLock, AntiBadEffects, LevitationControl from original ThunderHack source
           NOT IMPLEMENTED: all modules or all modes from the user-provided clients.
@@ -153,8 +157,8 @@ jobs:
           Regtest: all six native gameplay modules are instantiated once by AnkHack registry.
           NO gameplay test has been performed in Minecraft.
           EOF
-          tar --exclude=.git --exclude=.gradle --exclude=build -czf AnkHack-Unified-1.0.17-SOURCE.tar.gz -C upstream .
-          ls -lh AnkHack-Unified-1.0.17-Fabric-1.21.11.jar
+          tar --exclude=.git --exclude=.gradle --exclude=build -czf AnkHack-Unified-1.0.18-SOURCE.tar.gz -C upstream .
+          ls -lh AnkHack-Unified-1.0.18-Fabric-1.21.11.jar
       - name: Verify actual game launch and capture non-empty GUI
         timeout-minutes: 8
         working-directory: upstream
@@ -168,7 +172,7 @@ jobs:
           sleep 3
           # Loom sometimes starts an additional Xvfb server. Search the server
           # actually hosting Minecraft rather than grabbing an empty :98 screen.
-          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.17 runClient > ../ankhack-client-smoke.log 2>&1 &
+          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.18 runClient > ../ankhack-client-smoke.log 2>&1 &
           CLIENT_PID=$!
           found=""
           target=""
@@ -259,7 +263,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: AnkHack-1.0.17-GUI-SMOKE-DEBUG
+          name: AnkHack-1.0.18-GUI-SMOKE-DEBUG
           path: |
             AnkHack-GUI-virtual-display.png
             AnkHack-Minecraft-startup.png
@@ -273,13 +277,13 @@ jobs:
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
-          name: AnkHack-1.0.17-DEVELOPMENT-ONLY
+          name: AnkHack-1.0.18-DEVELOPMENT-ONLY
           path: |
-            AnkHack-Unified-1.0.17-Fabric-1.21.11.jar
+            AnkHack-Unified-1.0.18-Fabric-1.21.11.jar
             WHAT_IS_IMPLEMENTED.txt
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
-          name: AnkHack-1.0.17-GPL-Source
-          path: AnkHack-Unified-1.0.17-SOURCE.tar.gz
+          name: AnkHack-1.0.18-GPL-Source
+          path: AnkHack-Unified-1.0.18-SOURCE.tar.gz
           if-no-files-found: error
