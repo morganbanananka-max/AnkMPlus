@@ -11,6 +11,7 @@ sources={
  "AnkAutoSwim.java":base/"movement/AnkAutoSwim.java",
  "AnkGlide.java":base/"movement/AnkGlide.java",
  "AnkCombatRod.java":base/"combat/AnkCombatRod.java",
+ "AnkAutoSoup.java":base/"player/AnkAutoSoup.java",
 }
 for name,target in sources.items():
     origin=Path("unified/native")/name
@@ -21,6 +22,7 @@ s=registry.read_text()
 for old,new in [
  ("        add(new AnkSmartMace());","        add(new AnkSmartMace());\n        add(new AnkCombatRod());"),
  ("        add(new AnkBoatFly());","        add(new AnkBoatFly());\n        add(new AnkAutoSwim());\n        add(new AnkGlide());"),
+ ("        add(new AutoFish());","        add(new AutoFish());\n        add(new AnkAutoSoup());"),
 ]:
     assert s.count(old)==1,(old,s.count(old))
     s=s.replace(old,new,1)
@@ -29,6 +31,7 @@ notice=Path("upstream/ANKHACK_LICENSE_AND_ATTRIBUTIONS.md")
 with notice.open("a") as out:
     out.write("""
 Additional native adaptations (GPL-3.0):
+- AutoSoup from the actual user-supplied ThunderHack Reborn 1.21.11 source archive.
 - Wurst AutoSwim and Glide behaviors, copyright Wurst-Imperium/contributors.
 - LiquidBounce AutoRod concept, copyright CCBlueX.
 - Unlike LiquidBounce AutoRod's original implementation, AnkCombatRod
