@@ -162,13 +162,16 @@ jobs:
           found=""
           target=""
           for i in $(seq 1 115); do
+            # Loom's xvfb-run launches :99 with a private Xauthority cookie.
+            # A plain DISPLAY=:99 silently fails with "Authorization required".
+            auth=$(find /tmp -maxdepth 2 -path '/tmp/xvfb-run.*/Xauthority' -type f -print -quit 2>/dev/null || true)
             if grep -qF 'Game crashed!' ../ankhack-client-smoke.log; then
               echo "Minecraft crashed before GUI validation" | tee ../GUI_SMOKE_STATUS.txt
               tail -90 ../ankhack-client-smoke.log
               exit 1
             fi
             for display in :98 :99 :100 :101 :102 :103 :104 :105; do
-              id=$(DISPLAY="$display" xdotool search --onlyvisible --name 'Minecraft|AnkHack|1.21.11' 2>/dev/null | head -1 || true)
+              id=$(DISPLAY="$display" XAUTHORITY="$auth" xdotool search --onlyvisible --name 'Minecraft|AnkHack|1.21.11' 2>/dev/null | head -1 || true)
               if test -n "$id"; then found="$id"; target="$display"; break; fi
             done
             if test -n "$found"; then break; fi
@@ -178,7 +181,7 @@ jobs:
           ps auxww | grep -E '[X]vfb|[j]ava' > ../SMOKE_PROCESSES.txt || true
           for display in :98 :99 :100; do
             echo "--- $display ---" >> ../WINDOW_TREE.txt
-            DISPLAY="$display" xwininfo -root -tree >> ../WINDOW_TREE.txt 2>&1 || true
+            DISPLAY="$display" XAUTHORITY="$auth" xwininfo -root -tree >> ../WINDOW_TREE.txt 2>&1 || true
           done
           if test -z "$found"; then
             echo "FAIL: No visible Minecraft GUI; compilation alone is insufficient" | tee ../GUI_SMOKE_STATUS.txt
@@ -186,9 +189,9 @@ jobs:
             exit 1
           fi
           echo "Minecraft window $found on $target" | tee ../GUI_SMOKE_STATUS.txt
-          DISPLAY="$target" xdotool windowactivate --sync "$found" || true
+          DISPLAY="$target" XAUTHORITY="$auth" xdotool windowactivate --sync "$found" || true
           sleep 4
-          DISPLAY="$target" import -window root ../AnkHack-GUI-virtual-display.png
+          DISPLAY="$target" XAUTHORITY="$auth" import -window root ../AnkHack-GUI-virtual-display.png
           identify ../AnkHack-GUI-virtual-display.png
           test $(stat -c%s ../AnkHack-GUI-virtual-display.png) -gt 2000
           COLOR_COUNT=$(identify -format '%k' ../AnkHack-GUI-virtual-display.png)
