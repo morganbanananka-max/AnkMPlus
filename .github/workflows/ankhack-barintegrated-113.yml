@@ -69,11 +69,11 @@ jobs:
         working-directory: upstream
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.24 clean build -x test
+          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.25 clean build -x test
       - name: Finalize first-level pathfinder library for Fabric
         run: |
           python3 unified/finalize_baritone_113.py
-          test -s upstream/build/libs/AnkHack-Unified-1.21.11-1.0.24.jar
+          test -s upstream/build/libs/AnkHack-Unified-1.21.11-1.0.25.jar
       - name: Verify real compiled module variants
         run: |
           set -euo pipefail
@@ -137,9 +137,9 @@ jobs:
           unzip -p "$JAR" fabric.mod.json | grep -F 'nether-pathfinder-1.4.1.jar'
           test "$(jar tf "$JAR" | grep -c 'meteordevelopment/meteorclient/systems/modules/movement/Flight.class')" -eq 1
           ! jar tf "$JAR" | grep -Eq 'META-INF/jars/.*(wurst|liquidbounce|thunderhack|meteor-client)'
-          cp "$JAR" AnkHack-Unified-1.0.24-Fabric-1.21.11.jar
+          cp "$JAR" AnkHack-Unified-1.0.25-Fabric-1.21.11.jar
           cat > WHAT_IS_IMPLEMENTED.txt <<'EOF'
-          AnkHack 1.0.24
+          AnkHack 1.0.25
           - Meteor original codebase and modules
           - Wurst-based BoatFly and Flight variant
           - Wurst-derived bobber motion option in AutoFish
@@ -168,6 +168,7 @@ jobs:
           - ServerDiagnostics: displays correction observations and guards repeated Flight retries on servers
           - Flight: Auto does not default to fake local flying abilities on unprivileged multiplayer; packet antikick no longer enabled by default
           - TriggerBot: actual vanilla-range, friend-aware and attack-cooldown-aware combat logic
+          - Flight Auto now resets active variant when switching server/world without toggling module
           - Baritone: genuine 1.21.11 LGPL navigation library integrated within the single installable JAR (separable internal mod library)
           - ViewLock, AntiBadEffects, LevitationControl from original ThunderHack source
           NOT IMPLEMENTED: all modules or all modes from the user-provided clients.
@@ -175,8 +176,8 @@ jobs:
           Regtest: all six native gameplay modules are instantiated once by AnkHack registry.
           NO gameplay test has been performed in Minecraft.
           EOF
-          tar --exclude=.git --exclude=.gradle --exclude=build -czf AnkHack-Unified-1.0.24-SOURCE.tar.gz -C upstream .
-          ls -lh AnkHack-Unified-1.0.24-Fabric-1.21.11.jar
+          tar --exclude=.git --exclude=.gradle --exclude=build -czf AnkHack-Unified-1.0.25-SOURCE.tar.gz -C upstream .
+          ls -lh AnkHack-Unified-1.0.25-Fabric-1.21.11.jar
       - name: Verify actual game launch and capture non-empty GUI
         timeout-minutes: 8
         working-directory: upstream
@@ -190,7 +191,7 @@ jobs:
           sleep 3
           # Loom sometimes starts an additional Xvfb server. Search the server
           # actually hosting Minecraft rather than grabbing an empty :98 screen.
-          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.24 runClient > ../ankhack-client-smoke.log 2>&1 &
+          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.25 runClient > ../ankhack-client-smoke.log 2>&1 &
           CLIENT_PID=$!
           found=""
           target=""
@@ -292,7 +293,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: AnkHack-1.0.24-GUI-SMOKE-DEBUG
+          name: AnkHack-1.0.25-GUI-SMOKE-DEBUG
           path: |
             AnkHack-GUI-virtual-display.png
             AnkHack-Minecraft-startup.png
@@ -306,13 +307,13 @@ jobs:
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
-          name: AnkHack-1.0.24-DEVELOPMENT-ONLY
+          name: AnkHack-1.0.25-DEVELOPMENT-ONLY
           path: |
-            AnkHack-Unified-1.0.24-Fabric-1.21.11.jar
+            AnkHack-Unified-1.0.25-Fabric-1.21.11.jar
             WHAT_IS_IMPLEMENTED.txt
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
-          name: AnkHack-1.0.24-GPL-Source
-          path: AnkHack-Unified-1.0.24-SOURCE.tar.gz
+          name: AnkHack-1.0.25-GPL-Source
+          path: AnkHack-Unified-1.0.25-SOURCE.tar.gz
           if-no-files-found: error
