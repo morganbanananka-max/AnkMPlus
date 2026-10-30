@@ -144,51 +144,57 @@ jobs:
           EOF
           tar --exclude=.git --exclude=.gradle --exclude=build -czf AnkHack-Unified-1.0.13-SOURCE.tar.gz -C upstream .
           ls -lh AnkHack-Unified-1.0.13-Fabric-1.21.11.jar
-      - name: Attempt automated Minecraft GUI launch and screenshot
-        continue-on-error: true
+      - name: Verify actual game launch and capture non-empty GUI
         timeout-minutes: 8
         working-directory: upstream
         run: |
-          set -u
+          set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq xvfb xdotool x11-utils imagemagick openbox libgl1-mesa-dri libglu1-mesa
           Xvfb :98 -screen 0 1366x768x24 -nolisten tcp > ../xvfb.log 2>&1 &
-          DISPLAY=:98
-          export DISPLAY LIBGL_ALWAYS_SOFTWARE=1 MESA_GL_VERSION_OVERRIDE=3.3
+          export DISPLAY=:98 LIBGL_ALWAYS_SOFTWARE=1 MESA_GL_VERSION_OVERRIDE=3.3
           openbox > ../openbox.log 2>&1 &
           sleep 3
-          # Disable Loom's CI-driven second Xvfb display. Use our own :98
-          # so screenshots and keyboard input target the actual game.
+          # Loom sometimes starts an additional Xvfb server. Search the server
+          # actually hosting Minecraft rather than grabbing an empty :98 screen.
           CI=false ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.13 runClient > ../ankhack-client-smoke.log 2>&1 &
           CLIENT_PID=$!
           found=""
-          for i in $(seq 1 100); do
-            found=$(xdotool search --onlyvisible --name 'Minecraft|AnkHack|1.21.11' 2>/dev/null | head -1 || true)
+          target=""
+          for i in $(seq 1 115); do
+            if grep -qF 'Game crashed!' ../ankhack-client-smoke.log; then
+              echo "Minecraft crashed before GUI validation" | tee ../GUI_SMOKE_STATUS.txt
+              tail -90 ../ankhack-client-smoke.log
+              exit 1
+            fi
+            for display in :98 :99 :100 :101 :102 :103 :104 :105; do
+              id=$(DISPLAY="$display" xdotool search --onlyvisible --name 'Minecraft|AnkHack|1.21.11' 2>/dev/null | head -1 || true)
+              if test -n "$id"; then found="$id"; target="$display"; break; fi
+            done
             if test -n "$found"; then break; fi
             if ! kill -0 "$CLIENT_PID" 2>/dev/null; then break; fi
             sleep 1
           done
-          # Always capture the virtual screen, even if window lookup fails.
-          xwininfo -root -tree > ../WINDOW_TREE.txt 2>&1 || true
-          if test -n "$found"; then
-            echo "Minecraft GUI window found: $found" | tee ../GUI_SMOKE_STATUS.txt
-            xdotool windowactivate --sync "$found" || true
-            sleep 4
-            xdotool key --clearmodifiers Shift_R || true
-            sleep 3
-          else
-            echo "Window not found by name. Need screenshot + render log inspection." | tee ../GUI_SMOKE_STATUS.txt
+          ps auxww | grep -E '[X]vfb|[j]ava' > ../SMOKE_PROCESSES.txt || true
+          for display in :98 :99 :100; do
+            echo "--- $display ---" >> ../WINDOW_TREE.txt
+            DISPLAY="$display" xwininfo -root -tree >> ../WINDOW_TREE.txt 2>&1 || true
+          done
+          if test -z "$found"; then
+            echo "FAIL: No visible Minecraft GUI; compilation alone is insufficient" | tee ../GUI_SMOKE_STATUS.txt
+            tail -70 ../ankhack-client-smoke.log
+            exit 1
           fi
-          import -window root ../AnkHack-GUI-virtual-display.png || true
-          identify ../AnkHack-GUI-virtual-display.png || true
+          echo "Minecraft window $found on $target" | tee ../GUI_SMOKE_STATUS.txt
+          DISPLAY="$target" xdotool windowactivate --sync "$found" || true
+          sleep 4
+          DISPLAY="$target" import -window root ../AnkHack-GUI-virtual-display.png
+          identify ../AnkHack-GUI-virtual-display.png
+          test $(stat -c%s ../AnkHack-GUI-virtual-display.png) -gt 2000
           grep -F 'Path Manager: Baritone' ../ankhack-client-smoke.log
-          if grep -F 'Game crashed!' ../ankhack-client-smoke.log; then
-            echo "Baritone runtime crash detected"; exit 1
-          fi
+          if grep -qF 'Game crashed!' ../ankhack-client-smoke.log; then exit 1; fi
           kill "$CLIENT_PID" 2>/dev/null || true
-          sleep 2
-          # Screenshot presence alone does not count as a gameplay pass.
-          test -s ../AnkHack-GUI-virtual-display.png
+          # Passing this test means only GUI startup, not gameplay compatibility.
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -198,6 +204,7 @@ jobs:
             ankhack-client-smoke.log
             GUI_SMOKE_STATUS.txt
             WINDOW_TREE.txt
+            SMOKE_PROCESSES.txt
             xvfb.log
             openbox.log
           if-no-files-found: warn
