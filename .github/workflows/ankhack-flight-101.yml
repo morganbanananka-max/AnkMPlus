@@ -1,0 +1,61 @@
+name: Build AnkHack Unified 1.0.1 Double Jump Flight
+on:
+  push:
+    branches: [ankhack-doublejump-flight-101]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Download reproducible Minecraft 1.21.11 source baseline
+        run: |
+          git clone https://github.com/MeteorDevelopment/meteor-client.git upstream
+          cd upstream
+          git checkout 02973974afdfb715b193813959a837695049f7c1
+          test "$(git rev-parse HEAD)" = 02973974afdfb715b193813959a837695049f7c1
+      - name: Assemble single AnkHack client and native double-tap controls
+        run: |
+          set -euo pipefail
+          python3 unified/patch_unified.py
+          test -s upstream/src/main/java/meteordevelopment/meteorclient/AnkDoubleJumpFlight.java
+          grep -F 'EVENT_BUS.subscribe(new AnkDoubleJumpFlight())' upstream/src/main/java/meteordevelopment/meteorclient/MeteorClient.java
+          grep -F 'double-tap-jump' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/movement/Flight.java
+      - name: Compile 1.21.11 Fabric client with Java 21
+        working-directory: upstream
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.1 clean build -x test
+      - name: Verify Flight controls and build artifact
+        run: |
+          set -euo pipefail
+          JAR=$(find upstream/build/libs -maxdepth 1 -name 'AnkHack-Unified-*.jar' ! -name '*-sources.jar' ! -name '*-dev.jar' ! -name '*-javadoc.jar' | head -1)
+          test -s "$JAR"
+          unzip -p "$JAR" fabric.mod.json | grep -F '"id": "ankhack"'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/AnkDoubleJumpFlight.class'
+          javap -classpath "$JAR" -p meteordevelopment.meteorclient.AnkDoubleJumpFlight | grep -F 'onKey'
+          javap -classpath "$JAR" -p meteordevelopment.meteorclient.systems.modules.movement.Flight | grep -F 'ankhackDoubleJumpEnabled'
+          javap -classpath "$JAR" -p meteordevelopment.meteorclient.systems.modules.movement.Flight | grep -F 'ankhackDoubleJumpWindowMs'
+          printf '%s\n' 'Double-tap the Jump key twice within 350 ms (adjustable in Flight settings) to toggle the existing Flight module. Creative and Spectator are handled by vanilla. Multiplayer servers may block flight.' > INSTALL_NOTES.txt
+          cp "$JAR" AnkHack-Unified-1.0.1-1.21.11.jar
+          tar --exclude=.git --exclude=.gradle --exclude=build -czf AnkHack-Unified-1.0.1-SOURCE.tar.gz -C upstream .
+          ls -lh AnkHack-Unified-1.0.1-1.21.11.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnkHack-Unified-1.0.1-DoubleJump-Flight
+          path: |
+            AnkHack-Unified-1.0.1-1.21.11.jar
+            INSTALL_NOTES.txt
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnkHack-Unified-1.0.1-GPL-SOURCE
+          path: AnkHack-Unified-1.0.1-SOURCE.tar.gz
+          if-no-files-found: error
