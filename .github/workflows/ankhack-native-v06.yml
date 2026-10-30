@@ -41,6 +41,8 @@ jobs:
           s=p.read_text().replace('import net.minecraft.item.SwordItem;', 'import net.minecraft.registry.tag.ItemTags;')
           s=s.replace('stack.getItem() instanceof SwordItem', 'stack.isIn(ItemTags.SWORDS)')
           p.write_text(s)
+          p=Path('ankhack/src/main/java/se/ankclient/AnkHack.java')
+          s=p.read_text()
           assert 'GLFW.GLFW_KEY_F9' in s
           s=s.replace('GLFW.GLFW_KEY_F9','GLFW.GLFW_KEY_RIGHT_SHIFT')
           p.write_text(s)
@@ -63,5 +65,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: AnkHack-0.6.1-Native-1.21.11
-          path: ankhack/build/libs/AnkHack-Native-1.21.11-0.6.0.jar
+          path: ankhack/build/libs/AnkHack-Native-1.21.11-0.6.1.jar
           if-no-files-found: error
