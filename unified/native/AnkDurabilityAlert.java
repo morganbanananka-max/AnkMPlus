@@ -8,6 +8,7 @@ import meteordevelopment.meteorclient.systems.modules.Categories;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.item.ItemStack;
+import net.minecraft.entity.EquipmentSlot;
 
 /** ThunderHack Reborn's armor durability warning adapted to Meteor's events. GPL-3.0. */
 public class AnkDurabilityAlert extends Module {
@@ -33,7 +34,8 @@ public class AnkDurabilityAlert extends Module {
         if (ticks - lastAlert < repeatSeconds.get() * 20) return;
         int lowest = 101;
         boolean any = false;
-        for (ItemStack stack : mc.player.getArmorItems()) {
+        for (EquipmentSlot slot : new EquipmentSlot[]{EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET}) {
+            ItemStack stack = mc.player.getEquippedStack(slot);
             if (stack.isEmpty() || !stack.isDamageable()) continue;
             any = true;
             int percent = Math.max(0, Math.round(100f * (stack.getMaxDamage() - stack.getDamage()) / stack.getMaxDamage()));
