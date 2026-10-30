@@ -25,6 +25,7 @@ public final class AnkVariantProfiles {
     private static String[] variants(String module) {
         return switch (module) {
             case "auto-fish" -> new String[]{"MeteorEntity","WurstMotion"};
+            case "sprint" -> new String[]{"Strict","Rage","LiquidLegit","LiquidOmni"};
             default -> new String[]{"Abilities","Velocity","WurstMotion"};
         };
     }
@@ -83,6 +84,20 @@ public final class AnkVariantProfiles {
             catch(AtomicMoveNotSupportedException ex){Files.move(temp,FILE,StandardCopyOption.REPLACE_EXISTING);}
         }catch(IOException ex){System.err.println("[AnkHack] Cannot persist local variant feedback: "+ex.getClass().getSimpleName());}
     }
+    /** Persist the mean measured horizontal speed from a representative trial. */
+    public static synchronized void measuredSpeed(String server,String module,String variant,double meanBlocksPerTick) {
+        if("unknown".equals(server) || !Double.isFinite(meanBlocksPerTick))return;
+        init();
+        String sum=key(server,module,variant,"motion");
+        String n=key(server,module,variant,"motionSamples");
+        int centi=(int)Math.round(Math.max(0,Math.min(2.0,meanBlocksPerTick))*1000);
+        storage.setProperty(sum,Integer.toString(Math.min(1_000_000,get(sum)+centi)));
+        storage.setProperty(n,Integer.toString(Math.min(100000,get(n)+1)));
+        try {
+            Files.createDirectories(FILE.getParent());
+            try(OutputStream out=Files.newOutputStream(FILE)){storage.store(out,"AnkHack server-local observations, not guaranteed anti-cheat bypasses");}
+        }catch(IOException ex){System.err.println("[AnkHack] Could not store sprint observations");}
+    }
     public static void stable(String server,String module,String variant){
         increment(server,module,variant,"stable");
         sessionStable.merge(server+"."+module+"."+variant,1,Integer::sum);
@@ -101,12 +116,14 @@ public final class AnkVariantProfiles {
         }
     }
     public static boolean hasEvidence(String server,String module,String variant){
-        return get(key(server,module,variant,"stable"))+get(key(server,module,variant,"correction"))>0;
+        return get(key(server,module,variant,"stable"))+get(key(server,module,variant,"correction"))+get(key(server,module,variant,"motionSamples"))>0;
     }
     public static int score(String server,String module,String variant){
         int stable=get(key(server,module,variant,"stable"));
         int setbacks=get(key(server,module,variant,"correction"));
-        return stable*3-setbacks*8;
+        int samples=get(key(server,module,variant,"motionSamples"));
+        int meanMotion=samples>0 ? get(key(server,module,variant,"motion"))/samples : 0;
+        return stable*3-setbacks*8+(samples>0 ? meanMotion/10 : 0);
     }
     public static String choose(String server,String module){
         // No evidence -> safest expected creative-like choice. Not a fabricated benchmark.
