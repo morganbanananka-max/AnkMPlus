@@ -1,0 +1,96 @@
+name: Build AnkHack expanded source integrations (development)
+on:
+  push:
+    branches: [ankhack-integrations-107]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Fetch official, pinned source version for Minecraft 1.21.11
+        run: |
+          git clone https://github.com/MeteorDevelopment/meteor-client.git upstream
+          cd upstream
+          git checkout 02973974afdfb715b193813959a837695049f7c1
+          test "$(git rev-parse HEAD)" = "02973974afdfb715b193813959a837695049f7c1"
+      - name: Build unified source without nesting client jars
+        run: |
+          set -euo pipefail
+          python3 unified/patch_unified.py
+          python3 unified/patch_flight_variants.py
+          python3 unified/patch_crossclient_103.py
+          python3 unified/patch_sprint_auto.py
+          python3 unified/patch_more_native.py
+          python3 unified/patch_replenish_107.py
+          grep -F 'LiquidOmni' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/movement/Sprint.java
+          grep -F 'observeSprint()' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/movement/Sprint.java
+          grep -F 'WurstMotion' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/player/AutoFish.java
+          grep -F 'ThunderTimed' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/player/AntiAFK.java
+          grep -F 'case "auto-fish"' upstream/src/main/java/meteordevelopment/meteorclient/AnkVariantProfiles.java
+      - name: Compile full Fabric client
+        working-directory: upstream
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.7 clean build -x test
+      - name: Verify real compiled module variants
+        run: |
+          set -euo pipefail
+          JAR=$(find upstream/build/libs -maxdepth 1 -name 'AnkHack-Unified-*.jar' ! -name '*-sources.jar' ! -name '*-dev.jar' ! -name '*-javadoc.jar' | head -1)
+          test -s "$JAR"
+          unzip -p "$JAR" fabric.mod.json | grep -F '"id": "ankhack"'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.movement.Sprint$Mode' | grep -F 'LiquidOmni'
+          javap -classpath "$JAR" -p meteordevelopment.meteorclient.systems.modules.movement.Sprint | grep -F 'observeSprint()'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkAutoSwim.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkGlide.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/combat/AnkCombatRod.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkAutoSoup.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkToolSaver.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkNoServerSlot.class'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoReplenish$Strategy' | grep -F 'ThunderSwap'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoFish$BiteMode' | grep -F 'WurstMotion'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AntiAFK$Implementation' | grep -F 'ThunderTimed'
+          javap -classpath "$JAR" -p meteordevelopment.meteorclient.AnkVariantProfiles | grep -F 'choose('
+          test "$(jar tf "$JAR" | grep -c 'meteordevelopment/meteorclient/systems/modules/movement/Flight.class')" -eq 1
+          ! jar tf "$JAR" | grep -Eq 'META-INF/jars/.*(wurst|liquidbounce|thunderhack|meteor-client)'
+          cp "$JAR" AnkHack-Unified-1.0.7-Fabric-1.21.11.jar
+          cat > WHAT_IS_IMPLEMENTED.txt <<'EOF'
+          AnkHack 1.0.7
+          - Meteor original codebase and modules
+          - Wurst-based BoatFly and Flight variant
+          - Wurst-derived bobber motion option in AutoFish
+          - ThunderHack-based AutoLeave and AntiAFK idle mode
+          - LiquidBounce-derived Sprint modes: Legit and Omni
+          - AnkHack SmartMace, double-jump Flight, hashed per-server profiles
+          - Flight Auto switch based on server corrections
+          - AutoFish Auto based on observed fish in inventory (weak signal)
+          - Sprint Auto trials of Meteor/LiquidBounce variants using observed movement speed and corrections
+          - Native Wurst-derived AutoSwim, Glide
+          - LiquidBounce-inspired combat rod requiring manual aim; partial feature
+          - ThunderHack Reborn 1.21.11 source-derived AutoSoup, ToolSaver, NoServerSlot
+          - AutoReplenish: integrated ThunderSwap versus MeteorMerge under one Auto module
+          NOT IMPLEMENTED: all modules or all modes from the user-provided clients.
+          DEVELOPMENT BUILD ONLY: NOT A FINISHED CLIENT, NOT GAMEPLAY VERIFIED.
+          NO gameplay test has been performed in Minecraft.
+          EOF
+          tar --exclude=.git --exclude=.gradle --exclude=build -czf AnkHack-Unified-1.0.7-SOURCE.tar.gz -C upstream .
+          ls -lh AnkHack-Unified-1.0.7-Fabric-1.21.11.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnkHack-1.0.7-DEVELOPMENT-ONLY
+          path: |
+            AnkHack-Unified-1.0.7-Fabric-1.21.11.jar
+            WHAT_IS_IMPLEMENTED.txt
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnkHack-1.0.7-GPL-Source
+          path: AnkHack-Unified-1.0.7-SOURCE.tar.gz
+          if-no-files-found: error
