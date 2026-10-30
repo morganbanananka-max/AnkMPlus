@@ -22,7 +22,12 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class AnkVariantProfiles {
     private static final Path FILE=FabricLoader.getInstance().getConfigDir()
         .resolve("ankhack").resolve("server-variant-scores.properties");
-    private static final String[] VARIANTS={"Abilities","Velocity","WurstMotion"};
+    private static String[] variants(String module) {
+        return switch (module) {
+            case "auto-fish" -> new String[]{"MeteorEntity","WurstMotion"};
+            default -> new String[]{"Abilities","Velocity","WurstMotion"};
+        };
+    }
     private static final Properties storage=new Properties();
     private static boolean initialized;
     private static final Map<String,Integer> sessionCorrections=new ConcurrentHashMap<>();
@@ -90,7 +95,7 @@ public final class AnkVariantProfiles {
         return sessionCorrections.getOrDefault(server+"."+module+"."+variant,0);
     }
     public static void resetSession(String server,String module){
-        for(String v:VARIANTS){
+        for(String v:variants(module)){
             sessionCorrections.remove(server+"."+module+"."+v);
             sessionStable.remove(server+"."+module+"."+v);
         }
@@ -105,8 +110,8 @@ public final class AnkVariantProfiles {
     }
     public static String choose(String server,String module){
         // No evidence -> safest expected creative-like choice. Not a fabricated benchmark.
-        String choice="Abilities";int max=Integer.MIN_VALUE;
-        for(String variant:VARIANTS) {
+        String choice=variants(module)[0];int max=Integer.MIN_VALUE;
+        for(String variant:variants(module)) {
             if(!hasEvidence(server,module,variant))continue;
             int score=score(server,module,variant);
             if(score>max){choice=variant;max=score;}
