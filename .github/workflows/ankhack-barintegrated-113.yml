@@ -214,6 +214,27 @@ jobs:
           done
           identify ../AnkHack-GUI-virtual-display.png
           test "$COLOR_COUNT" -gt 16
+          cp ../AnkHack-GUI-virtual-display.png ../AnkHack-Minecraft-startup.png
+          # First-run Minecraft asks for accessibility settings. Attempt to
+          # click Continue, then try the AnkHack click-GUI binding. Save an
+          # independent screenshot for actual visual review; never label it
+          # as verified just because the startup window contains colors.
+          DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool windowfocus "$found" || true
+          GEOM=$(DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool getwindowgeometry --shell "$found" || true)
+          WIDTH=$(printf '%s\\n' "$GEOM" | sed -nE 's/^WIDTH=([0-9]+)$/\\1/p')
+          HEIGHT=$(printf '%s\\n' "$GEOM" | sed -nE 's/^HEIGHT=([0-9]+)$/\\1/p')
+          if test -n "$WIDTH" && test -n "$HEIGHT"; then
+            DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool mousemove --window "$found" "$((WIDTH/2))" "$((HEIGHT*93/100))" click 1 || true
+          fi
+          sleep 5
+          DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool key --clearmodifiers Shift_R || true
+          sleep 5
+          DISPLAY="$target" XAUTHORITY="$xauth_file" import -window "$WINDOW_ID" ../AnkHack-after-right-shift.png || true
+          if test -s ../AnkHack-after-right-shift.png; then
+            identify ../AnkHack-after-right-shift.png
+          fi
+          # This second screenshot is evidence for manual review only.
+          # Startup passing is NOT evidence of successful GUI keybind.
           grep -F 'Path Manager: Baritone' ../ankhack-client-smoke.log
           if grep -qF 'Game crashed!' ../ankhack-client-smoke.log; then exit 1; fi
           kill "$CLIENT_PID" 2>/dev/null || true
@@ -224,6 +245,8 @@ jobs:
           name: AnkHack-1.0.14-GUI-SMOKE-DEBUG
           path: |
             AnkHack-GUI-virtual-display.png
+            AnkHack-Minecraft-startup.png
+            AnkHack-after-right-shift.png
             ankhack-client-smoke.log
             GUI_SMOKE_STATUS.txt
             WINDOW_TREE.txt
