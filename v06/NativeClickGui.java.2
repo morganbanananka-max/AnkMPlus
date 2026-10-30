@@ -1,0 +1,108 @@
+    @Override public void render(DrawContext d,int mx,int my,float delta){
+        // No Minecraft vanilla buttons are visible. Only hitboxes come from widgets.
+        d.fillGradient(0,0,width,height,0xEC05080D,0xEE101924);
+        round(d,x+8,y+10,w,h,0x99000000);
+        round(d,x,y,w,h,BASE);
+        fill(d,x+7,y+5,w-14,4,YELLOW);
+        round(d,x+15,y+17,w-30,77,HEAD);
+        round(d,x+29,y+27,46,45,0xFF3A301D);
+        round(d,x+34,y+32,36,35,YELLOW);
+        label(d,"A",x+47,y+44,BASE);
+        label(d,"ANKHACK",x+90,y+28,TEXT);
+        label(d,"UNIFIED CLIENT  /  v0.6",x+90,y+47,GOLD);
+        label(d,"1.21.11  •  FABRIC",x+w-194,y+39,GRAY);
+        round(d,x+w-48,y+19,28,28,0xFF293647);
+        label(d,"X",x+w-38,y+29,TEXT);
+
+        round(d,x+15,y+108,sidebar-13,h-122,HEAD);
+        label(d,"CATEGORIES",x+26,y+123,GOLD);
+        for(int i=0;i<cats.length;i++){
+            int yy=y+144+i*40;
+            if(yy+35>y+h-132)break;
+            boolean active=category.equals(cats[i]);
+            boolean hovered=mx>=x+19&&mx<x+sidebar-8&&my>=yy&&my<yy+34;
+            if(active||hovered)round(d,x+19,yy,sidebar-27,34,active?0xFF3B321F:0xFF293649);
+            if(active)round(d,x+19,yy+7,3,20,YELLOW);
+            label(d,clip(labels[i],compact?10:18),x+31,yy+12,active?YELLOW:TEXT);
+        }
+        label(d,"PROFILES",x+28,y+h-130,GOLD);
+        for(int i=0;i<profiles.length;i++){
+            int py=y+h-104+i*19;
+            if(py+18>=y+h-6)break;
+            boolean active=profile.equals(profiles[i]);
+            if(active)round(d,x+19,py,sidebar-27,18,0xFF333D32);
+            label(d,clip(profiles[i],16),x+31,py+5,active?YELLOW:GRAY);
+        }
+
+        round(d,listX,y+108,listW,h-122,HEAD);
+        label(d,category.equals("ALL")?"EXPLORE HACKS":labels[Arrays.asList(cats).indexOf(category)].toUpperCase(Locale.ROOT),
+              listX+18,y+122,TEXT);
+        int running=0;
+        for(Module m:AnkHack.MODULES.all())if(m.enabled()&&!readout(m))running++;
+        label(d,matches.size()+" found  /  "+running+" running",listX+18,y+147,GRAY);
+        for(int i=0;i<visible.size();i++){
+            Module m=visible.get(i);
+            int yy=rowY+i*51;
+            boolean active=selected!=null&&selected.id.equals(m.id),hovered=mx>=listX+16&&mx<listX+listW-102&&my>=yy&&my<yy+46;
+            round(d,listX+15,yy,listW-30,46,active?0xFF29394D:hovered?0xFF243246:CARD);
+            if(active)round(d,listX+15,yy+8,3,29,YELLOW);
+            label(d,clip(m.name,Math.max(9,(listW-134)/6)),listX+28,yy+10,TEXT);
+            label(d,clip(m.description,Math.max(11,(listW-143)/6)),listX+28,yy+28,GRAY);
+            int sx=listX+listW-83;
+            round(d,sx,yy+10,66,26,m.enabled()?0xFF245441:0xFF2D3948);
+            round(d,sx+(m.enabled()?41:5),yy+14,18,18,m.enabled()?0xFF70E4A6:0xFF9CABBA);
+            label(d,m.enabled()?"ON":"OFF",sx+(m.enabled()?11:29),yy+18,m.enabled()?0xFF70E4A6:TEXT);
+        }
+        if(visible.isEmpty()) {
+            label(d,"No matches. Try another search.",listX+20,y+208,GRAY);
+        }
+        int fy=y+h-51;
+        round(d,listX+16,fy,34,28,CARD);
+        round(d,listX+56,fy,34,28,CARD);
+        label(d,"<",listX+28,fy+10,TEXT);
+        label(d,">",listX+68,fy+10,TEXT);
+        label(d,"PAGE "+(page+1)+" / "+Math.max(1,(matches.size()+rows-1)/rows),listX+104,fy+10,GRAY);
+
+        if(!compact){
+            round(d,detailX,y+108,detailW-1,h-122,HEAD);
+            label(d,"MODULE DETAILS",detailX+18,y+124,GOLD);
+            if(selected!=null){
+                round(d,detailX+14,y+153,detailW-30,56,CARD);
+                label(d,clip(selected.name,22),detailX+25,y+166,TEXT);
+                label(d,selected.category.name(),detailX+25,y+186,GRAY);
+                round(d,detailX+13,y+220,detailW-31,34,selected.enabled()?0xFF1D4C37:0xFF483B24);
+                label(d,selected.enabled()?"ENABLED  /  CLICK TO DISABLE":"DISABLED  /  CLICK TO ENABLE",
+                      detailX+25,y+233,selected.enabled()?0xFF75E3AD:YELLOW);
+                label(d,"DESCRIPTION",detailX+18,y+275,GOLD);
+                String[] words=selected.description.split(" ");
+                StringBuilder line=new StringBuilder();int ly=y+294;
+                for(String word:words) {
+                    if(line.length()+word.length()+1>28){
+                        label(d,line.toString(),detailX+18,ly,GRAY);line=new StringBuilder();ly+=13;
+                    }
+                    if(line.length()>0)line.append(' ');
+                    line.append(word);
+                }
+                if(line.length()>0)label(d,line.toString(),detailX+18,ly,GRAY);
+            }
+            label(d,"QUICK TUNING",detailX+18,y+325,GOLD);
+            int j=0;
+            for(NativeOptions.Option opt:NativeOptions.all()){
+                if(j>=4)break;int oy=y+336+j*50;
+                label(d,clip(opt.label(),22),detailX+18,oy,TEXT);
+                label(d,String.format(Locale.ROOT,"%.2f",NativeOptions.get(opt.key())),detailX+18,oy+20,GRAY);
+                round(d,detailX+detailW-76,oy+10,24,23,CARD);
+                round(d,detailX+detailW-46,oy+10,24,23,CARD);
+                label(d,"-",detailX+detailW-67,oy+18,TEXT);
+                label(d,"+",detailX+detailW-37,oy+18,YELLOW);
+                j++;
+            }
+            round(d,detailX+14,y+h-92,detailW-31,28,0xFF55462B);
+            round(d,detailX+14,y+h-57,detailW-31,28,CARD);
+            label(d,"SAVE "+profile.toUpperCase(Locale.ROOT),detailX+28,y+h-82,YELLOW);
+            label(d,"LOAD "+profile.toUpperCase(Locale.ROOT),detailX+28,y+h-47,TEXT);
+        }
+        super.render(d,mx,my,delta);
+    }
+    @Override public boolean shouldPause(){return false;}
+}
