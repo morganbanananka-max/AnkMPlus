@@ -21,7 +21,11 @@ assert s.count(old)==1
 s=s.replace(old,'''    // Baritone is a real 1.21.11 LGPL-3.0 pathfinding library. Loom's
     // modInclude keeps a single installable AnkHack JAR and preserves
     // Baritone as a separable/replaceable library for LGPL compliance.
-    modInclude(libs.baritone)''')
+    modInclude(libs.baritone)
+    // Nested Jar-in-Jar dependencies are not loaded recursively by Fabric.
+    // Extract the LGPL nether-pathfinder from the pinned upstream Baritone JAR
+    // and include it as a first-level replaceable library instead.
+    modInclude(files("libs/nether-pathfinder-1.4.1.jar"))''')
 build.write_text(s)
 
 notice=root/"ANKHACK_LICENSE_AND_ATTRIBUTIONS.md"
@@ -30,7 +34,7 @@ with notice.open("a") as out:
 Baritone 1.21.11 pathfinder:
   Library: meteordevelopment:baritone:1.21.11-SNAPSHOT, LGPL-3.0.
   https://github.com/MeteorDevelopment/baritone
-  Baritone is an internal, separable Fabric library, not a nested hack
+  Baritone and its NetherPathfinder dependency are first-level internal, separable Fabric libraries, not nested hack
   CLIENT. It is used by the existing AnkHack PathManagers, Mine, Follow,
   AutoWalk and Baritone-supported GUI features. Its corresponding source
   is available from its upstream repository; LGPL replacement allowed.
