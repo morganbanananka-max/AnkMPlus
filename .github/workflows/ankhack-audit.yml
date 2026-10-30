@@ -1,0 +1,40 @@
+name: AnkHack full-source coverage audit
+on:
+  push:
+    branches: [ankhack-full-audit-105]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Inventory pinned client sources and identify missing integrations
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 unified/audit_clients.py
+      - name: Show coverage and block any false completeness claim
+        run: |
+          cat audit_results/coverage.md
+          test -s audit_results/source_inventory.csv
+          test -s audit_results/duplicate_families.json
+          python3 - <<'PY'
+          import csv
+          from collections import Counter
+          with open('audit_results/source_inventory.csv',newline='') as f:
+              rows=list(csv.DictReader(f))
+          sources=Counter(x['source'] for x in rows)
+          assert all(sources[k]>0 for k in ['Meteor','Wurst','LiquidBounce','ThunderHack','Baritone'])
+          assert any(x['status']=='not_integrated' for x in rows)
+          print('Audit verified. No claim of a complete AnkHack release.')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnkHack-FULL-COVERAGE-AUDIT
+          path: audit_results/
+          if-no-files-found: error
