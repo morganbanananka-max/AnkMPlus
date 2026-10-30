@@ -104,12 +104,13 @@ replace("""    public Flight() {
             AnkVariantProfiles.score(activeServer,"flight",activeVariant.name());
         return selectedMode().name();
     }""")
-replace("        if (mode.get() == Mode.Abilities && !mc.player.isSpectator()) {",
-"""        resetVariantSession();
-        if (selectedMode() == Mode.Abilities && !mc.player.isSpectator()) {""",1)
-# The second occurrence is onDeactivate, and we must NOT reset the session there.
-replace("        if (mode.get() == Mode.Abilities && !mc.player.isSpectator()) {",
-"""        if (selectedMode() == Mode.Abilities && !mc.player.isSpectator()) {""",1)
+replace("    public void onActivate() {\n        if (mode.get() == Mode.Abilities && !mc.player.isSpectator()) {",
+"""    public void onActivate() {
+        resetVariantSession();
+        if (selectedMode() == Mode.Abilities && !mc.player.isSpectator()) {""")
+replace("    public void onDeactivate() {\n        if (mode.get() == Mode.Abilities && !mc.player.isSpectator()) {",
+"""    public void onDeactivate() {
+        if (selectedMode() == Mode.Abilities && !mc.player.isSpectator()) {""")
 replace("    private void onPostTick(TickEvent.Post event) {",
 """    private void onPostTick(TickEvent.Post event) {
         if (mc.player != null && mc.world != null) flightFeedback();""")
