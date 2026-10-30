@@ -1,4 +1,4 @@
-name: Build AnkHack 1.0.3 multi-source native variants
+name: Build AnkHack 1.0.4 multi-source native variants
 on:
   push:
     branches: [ankhack-crossclient-103]
@@ -27,7 +27,9 @@ jobs:
           python3 unified/patch_unified.py
           python3 unified/patch_flight_variants.py
           python3 unified/patch_crossclient_103.py
+          python3 unified/patch_sprint_auto.py
           grep -F 'LiquidOmni' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/movement/Sprint.java
+          grep -F 'observeSprint()' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/movement/Sprint.java
           grep -F 'WurstMotion' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/player/AutoFish.java
           grep -F 'ThunderTimed' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/player/AntiAFK.java
           grep -F 'case "auto-fish"' upstream/src/main/java/meteordevelopment/meteorclient/AnkVariantProfiles.java
@@ -35,7 +37,7 @@ jobs:
         working-directory: upstream
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.3 clean build -x test
+          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.4 clean build -x test
       - name: Verify real compiled module variants
         run: |
           set -euo pipefail
@@ -43,14 +45,15 @@ jobs:
           test -s "$JAR"
           unzip -p "$JAR" fabric.mod.json | grep -F '"id": "ankhack"'
           javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.movement.Sprint$Mode' | grep -F 'LiquidOmni'
+          javap -classpath "$JAR" -p meteordevelopment.meteorclient.systems.modules.movement.Sprint | grep -F 'observeSprint()'
           javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoFish$BiteMode' | grep -F 'WurstMotion'
           javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AntiAFK$Implementation' | grep -F 'ThunderTimed'
           javap -classpath "$JAR" -p meteordevelopment.meteorclient.AnkVariantProfiles | grep -F 'choose('
           test "$(jar tf "$JAR" | grep -c 'meteordevelopment/meteorclient/systems/modules/movement/Flight.class')" -eq 1
           ! jar tf "$JAR" | grep -Eq 'META-INF/jars/.*(wurst|liquidbounce|thunderhack|meteor-client)'
-          cp "$JAR" AnkHack-Unified-1.0.3-Fabric-1.21.11.jar
+          cp "$JAR" AnkHack-Unified-1.0.4-Fabric-1.21.11.jar
           cat > WHAT_IS_IMPLEMENTED.txt <<'EOF'
-          AnkHack 1.0.3
+          AnkHack 1.0.4
           - Meteor original codebase and modules
           - Wurst-based BoatFly and Flight variant
           - Wurst-derived bobber motion option in AutoFish
@@ -59,20 +62,21 @@ jobs:
           - AnkHack SmartMace, double-jump Flight, hashed per-server profiles
           - Flight Auto switch based on server corrections
           - AutoFish Auto based on observed fish in inventory (weak signal)
+          - Sprint Auto trials of Meteor/LiquidBounce variants using observed movement speed and corrections
           NOT IMPLEMENTED: all modules or all modes from the user-provided clients.
           NO gameplay test has been performed in Minecraft.
           EOF
-          tar --exclude=.git --exclude=.gradle --exclude=build -czf AnkHack-Unified-1.0.3-SOURCE.tar.gz -C upstream .
-          ls -lh AnkHack-Unified-1.0.3-Fabric-1.21.11.jar
+          tar --exclude=.git --exclude=.gradle --exclude=build -czf AnkHack-Unified-1.0.4-SOURCE.tar.gz -C upstream .
+          ls -lh AnkHack-Unified-1.0.4-Fabric-1.21.11.jar
       - uses: actions/upload-artifact@v4
         with:
-          name: AnkHack-1.0.3-Integrated-Clients
+          name: AnkHack-1.0.4-Integrated-Clients
           path: |
-            AnkHack-Unified-1.0.3-Fabric-1.21.11.jar
+            AnkHack-Unified-1.0.4-Fabric-1.21.11.jar
             WHAT_IS_IMPLEMENTED.txt
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
-          name: AnkHack-1.0.3-GPL-Source
-          path: AnkHack-Unified-1.0.3-SOURCE.tar.gz
+          name: AnkHack-1.0.4-GPL-Source
+          path: AnkHack-Unified-1.0.4-SOURCE.tar.gz
           if-no-files-found: error
