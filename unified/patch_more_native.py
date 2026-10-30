@@ -14,6 +14,9 @@ sources={
  "AnkAutoSoup.java":base/"player/AnkAutoSoup.java",
  "AnkToolSaver.java":base/"player/AnkToolSaver.java",
  "AnkNoServerSlot.java":base/"player/AnkNoServerSlot.java",
+ "AnkViewLock.java":base/"player/AnkViewLock.java",
+ "AnkAntiBadEffects.java":base/"player/AnkAntiBadEffects.java",
+ "AnkLevitationControl.java":base/"movement/AnkLevitationControl.java",
 }
 for name,target in sources.items():
     origin=Path("unified/native")/name
@@ -24,7 +27,8 @@ s=registry.read_text()
 for old,new in [
  ("        add(new AnkSmartMace());","        add(new AnkSmartMace());\n        add(new AnkCombatRod());"),
  ("        add(new AnkBoatFly());","        add(new AnkBoatFly());\n        add(new AnkAutoSwim());\n        add(new AnkGlide());"),
- ("        add(new AutoFish());","        add(new AutoFish());\n        add(new AnkAutoSoup());\n        add(new AnkToolSaver());\n        add(new AnkNoServerSlot());"),
+ ("        add(new AutoFish());","        add(new AutoFish());\n        add(new AnkAutoSoup());\n        add(new AnkToolSaver());\n        add(new AnkNoServerSlot());\n        add(new AnkViewLock());\n        add(new AnkAntiBadEffects());"),
+ ("        add(new AnkGlide());","        add(new AnkGlide());\n        add(new AnkLevitationControl());"),
 ]:
     assert s.count(old)==1,(old,s.count(old))
     s=s.replace(old,new,1)
@@ -33,7 +37,7 @@ notice=Path("upstream/ANKHACK_LICENSE_AND_ATTRIBUTIONS.md")
 with notice.open("a") as out:
     out.write("""
 Additional native adaptations (GPL-3.0):
-- AutoSoup, ToolSaver, NoServerSlot from the user-supplied ThunderHack Reborn 1.21.11 archive.
+- AutoSoup, ToolSaver, NoServerSlot, ViewLock, AntiBadEffects, LevitationControl from the user-supplied ThunderHack Reborn 1.21.11 archive.
 - Wurst AutoSwim and Glide behaviors, copyright Wurst-Imperium/contributors.
 - LiquidBounce AutoRod concept, copyright CCBlueX.
 - Unlike LiquidBounce AutoRod's original implementation, AnkCombatRod
