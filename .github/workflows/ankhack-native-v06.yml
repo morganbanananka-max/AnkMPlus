@@ -35,7 +35,7 @@ jobs:
           assert 'Features.registerAll(MODULES);' in s
           old='        Features.registerAll(MODULES);'
           assert s.count(old)==1
-          s=s.replace(old,'        Features.registerAll(MODULES);\\n        UnifiedHacks.registerAll(MODULES);\\n        MoreHacks.registerAll(MODULES);',1)
+          s=s.replace(old,'        Features.registerAll(MODULES);\n        UnifiedHacks.registerAll(MODULES);\n        MoreHacks.registerAll(MODULES);',1)
           assert 'Overlay.render(' in s
           s=s.replace('Overlay.render(', 'OverlayLite.render(')
           p.write_text(s)
