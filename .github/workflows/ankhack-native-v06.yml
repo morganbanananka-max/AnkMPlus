@@ -1,0 +1,58 @@
+name: Build AnkHack 0.6 native integrated client
+on:
+  push:
+    branches: [ankhack-ui-native-06]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.1'
+      - name: Restore v0.5 source and replace with unified 0.6 code
+        run: |
+          set -euo pipefail
+          mkdir -p ankhack
+          base64 -d ankhack-native-05.tar.gz.b64 | tar -xz -C ankhack
+          P=ankhack/src/main/java/se/ankclient
+          cat v06/NativeClickGui.java.1 v06/NativeClickGui.java.2 > "$P/NativeClickGui.java"
+          cp v06/UnifiedHacks.java "$P/UnifiedHacks.java"
+          cp v06/OverlayLite.java "$P/OverlayLite.java"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('ankhack/src/main/java/se/ankclient/AnkHack.java')
+          s=p.read_text()
+          assert 'Features.registerAll(MODULES);' in s
+          s=s.replace('Features.registerAll(MODULES);','Features.registerAll(MODULES);\n        UnifiedHacks.registerAll(MODULES);')
+          assert 'Overlay.render(' in s
+          s=s.replace('Overlay.render(', 'OverlayLite.render(')
+          p.write_text(s)
+          p=Path('ankhack/gradle.properties')
+          s=p.read_text().replace('mod_version=0.5.0','mod_version=0.6.0')
+          p.write_text(s)
+          PY
+      - name: Compile Fabric client (Java 21)
+        working-directory: ankhack
+        run: gradle --no-daemon --console=plain clean build
+      - name: Verify 0.6 single-client artifact
+        run: |
+          set -euo pipefail
+          JAR=ankhack/build/libs/AnkHack-Native-1.21.11-0.6.0.jar
+          test -s "$JAR"
+          unzip -p "$JAR" fabric.mod.json | grep -F '"id":"ankhack"'
+          jar tf "$JAR" | grep -q 'se/ankclient/UnifiedHacks.class'
+          ! jar tf "$JAR" | grep -Eq '^META-INF/jars/|^meteordevelopment/|^net/wurstclient/|^thunder/hack/'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnkHack-0.6-Native-1.21.11
+          path: ankhack/build/libs/AnkHack-Native-1.21.11-0.6.0.jar
+          if-no-files-found: error
