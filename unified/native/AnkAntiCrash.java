@@ -24,12 +24,13 @@ public class AnkAntiCrash extends Module {
         .defaultValue(true).build());
     private final AtomicInteger blocked = new AtomicInteger();
     private int ticksSinceLastWarning = 200;
+    private int lastWarnedCount;
 
     public AnkAntiCrash() {
         super(Categories.Misc, "ank-anti-crash",
             "Reject obviously invalid explosion, particle and teleport coordinates (ThunderHack adaptation).");
     }
-    @Override public void onActivate() { blocked.set(0);ticksSinceLastWarning=200; }
+    @Override public void onActivate() { blocked.set(0);ticksSinceLastWarning=200;lastWarnedCount=0; }
     @Override public String getInfoString() { return "Blocked: " + blocked.get(); }
 
     private static boolean invalid(double x) {
@@ -60,8 +61,9 @@ public class AnkAntiCrash extends Module {
     @EventHandler private void onTick(TickEvent.Post event) {
         if (mc.player==null || mc.world==null) return;
         if(ticksSinceLastWarning<200)ticksSinceLastWarning++;
-        if(blocked.get()>0 && warnings.get() && ticksSinceLastWarning>=200) {
+        if(blocked.get()>lastWarnedCount && warnings.get() && ticksSinceLastWarning>=200) {
             warning("Rejected malformed server packet values. Total blocked: %s",blocked.get());
+            lastWarnedCount=blocked.get();
             ticksSinceLastWarning=0;
         }
     }
