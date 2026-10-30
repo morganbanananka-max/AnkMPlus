@@ -33,7 +33,9 @@ jobs:
           p=Path('ankhack/src/main/java/se/ankclient/AnkHack.java')
           s=p.read_text()
           assert 'Features.registerAll(MODULES);' in s
-          s=s.replace('Features.registerAll(MODULES);','Features.registerAll(MODULES);\n        UnifiedHacks.registerAll(MODULES);\n        MoreHacks.registerAll(MODULES);')
+          old='        Features.registerAll(MODULES);'
+          assert s.count(old)==1
+          s=s.replace(old,'        Features.registerAll(MODULES);\\n        UnifiedHacks.registerAll(MODULES);\\n        MoreHacks.registerAll(MODULES);',1)
           assert 'Overlay.render(' in s
           s=s.replace('Overlay.render(', 'OverlayLite.render(')
           p.write_text(s)
@@ -61,6 +63,8 @@ jobs:
           unzip -p "$JAR" fabric.mod.json | grep -F '"id":"ankhack"'
           jar tf "$JAR" | grep -q 'se/ankclient/UnifiedHacks.class'
           jar tf "$JAR" | grep -q 'se/ankclient/MoreHacks.class'
+          test "$(javap -c -classpath "$JAR" se.ankclient.AnkHack | grep -c 'MoreHacks.registerAll')" -eq 1
+          test "$(javap -c -classpath "$JAR" se.ankclient.AnkHack | grep -c 'UnifiedHacks.registerAll')" -eq 1
           ! jar tf "$JAR" | grep -Eq '^META-INF/jars/|^meteordevelopment/|^net/wurstclient/|^thunder/hack/'
       - uses: actions/upload-artifact@v4
         with:
