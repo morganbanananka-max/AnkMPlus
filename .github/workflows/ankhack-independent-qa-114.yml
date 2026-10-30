@@ -196,8 +196,12 @@ jobs:
             exit 1
           fi
           echo "Minecraft window $found on $target" | tee ../GUI_SMOKE_STATUS.txt
-          DISPLAY="$target" XAUTHORITY="$auth" xdotool windowactivate --sync "$found" || true
-          sleep 4
+          DISPLAY="$target" XAUTHORITY="$auth" xdotool windowfocus "$found" || true
+          # The Minecraft splash is NOT an AnkHack GUI screenshot.
+          sleep 26
+          DISPLAY="$target" XAUTHORITY="$auth" import -window root ../Minecraft-Main-Menu.png
+          DISPLAY="$target" XAUTHORITY="$auth" xdotool key --clearmodifiers --window "$found" Shift_R || true
+          sleep 5
           DISPLAY="$target" XAUTHORITY="$auth" import -window root ../AnkHack-GUI-virtual-display.png
           identify ../AnkHack-GUI-virtual-display.png
           test $(stat -c%s ../AnkHack-GUI-virtual-display.png) -gt 2000
@@ -214,6 +218,7 @@ jobs:
           name: AnkHack-QA114-GUI-SMOKE-DEBUG
           path: |
             AnkHack-GUI-virtual-display.png
+            Minecraft-Main-Menu.png
             ankhack-client-smoke.log
             GUI_SMOKE_STATUS.txt
             WINDOW_TREE.txt
