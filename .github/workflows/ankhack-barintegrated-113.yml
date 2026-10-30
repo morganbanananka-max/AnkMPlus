@@ -157,7 +157,7 @@ jobs:
           sleep 3
           # Loom sometimes starts an additional Xvfb server. Search the server
           # actually hosting Minecraft rather than grabbing an empty :98 screen.
-          env -u CI ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.13 runClient > ../ankhack-client-smoke.log 2>&1 &
+          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.13 runClient > ../ankhack-client-smoke.log 2>&1 &
           CLIENT_PID=$!
           found=""
           target=""
