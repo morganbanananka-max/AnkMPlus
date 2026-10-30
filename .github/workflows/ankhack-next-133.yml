@@ -1,0 +1,356 @@
+name: AnkHack 1.0.33 native gameplay ports and runtime QA
+on:
+  push:
+    branches: [ankhack-next-133]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ankhack-dev-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Fetch official, pinned source version for Minecraft 1.21.11
+        run: |
+          git clone https://github.com/MeteorDevelopment/meteor-client.git upstream
+          cd upstream
+          git checkout 02973974afdfb715b193813959a837695049f7c1
+          test "$(git rev-parse HEAD)" = "02973974afdfb715b193813959a837695049f7c1"
+      - name: Build unified source without nesting client jars
+        run: |
+          set -euo pipefail
+          python3 unified/patch_unified.py
+          python3 unified/patch_brand_132.py
+          python3 unified/patch_flight_variants.py
+          python3 unified/patch_crossclient_103.py
+          python3 unified/patch_sprint_auto.py
+          python3 unified/patch_more_native.py
+          python3 unified/patch_replenish_107.py
+          python3 unified/patch_autoeat_variants_108.py
+          python3 unified/patch_autotool_variants_109.py
+          python3 unified/patch_gui_quality_110.py
+          python3 unified/patch_gui_polish_111.py
+          python3 unified/patch_fastclimb_variants_112.py
+          python3 unified/patch_baritone_113.py
+          python3 unified/patch_extra_thunder_native_114.py
+          python3 unified/patch_autoarmor_114.py
+          python3 unified/patch_gui_responsive_115.py
+          python3 unified/patch_extra_thunder_native_118.py
+          python3 unified/patch_fastuse_variants_120.py
+          python3 unified/patch_extra_misc_121.py
+          python3 unified/patch_bowspam_variants_122.py
+          python3 unified/patch_server_diagnostics_123.py
+          python3 unified/patch_triggerbot_124.py
+          python3 unified/patch_gui_compact_127.py
+          python3 unified/patch_extra_util_129.py
+          python3 unified/patch_autogap_variants_130.py
+          python3 unified/patch_profiles_safety_131.py
+          python3 unified/patch_gui_brand_132.py
+          python3 unified/patch_native_133.py
+          python3 -m unittest discover -v -s unified/tests -p 'test_native_133.py'
+          # Fully reproducible library source: exact official Baritone 1.21.11
+          # artifact with the same SHA256 as the user-supplied JAR.
+          mkdir -p upstream/libs
+          curl -fL --retry 3 --max-time 90 \
+            'https://maven.meteordev.org/snapshots/meteordevelopment/baritone/1.21.11-SNAPSHOT/baritone-1.21.11-20260103.131549-1.jar' \
+            -o upstream/libs/baritone-original-1.21.11.jar
+          echo "3e8c7ab86b7c0148f8711ca2e7cb608712dbc2a97253de0f131ec3db41a2bd3c  upstream/libs/baritone-original-1.21.11.jar" | sha256sum -c -
+          unzip -p upstream/libs/baritone-original-1.21.11.jar \
+            META-INF/jars/nether-pathfinder-1.4.1.jar \
+            > upstream/libs/nether-pathfinder-1.4.1.jar
+          test -s upstream/libs/nether-pathfinder-1.4.1.jar
+          jar tf upstream/libs/nether-pathfinder-1.4.1.jar | grep -F 'dev/babbaj/pathfinder/NetherPathfinder.class'
+          grep -F 'LiquidOmni' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/movement/Sprint.java
+          grep -F 'observeSprint()' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/movement/Sprint.java
+          grep -F 'WurstMotion' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/player/AutoFish.java
+          grep -F 'ThunderTimed' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/player/AntiAFK.java
+          grep -F 'case "auto-fish"' upstream/src/main/java/meteordevelopment/meteorclient/AnkVariantProfiles.java
+      - name: Compile full Fabric client
+        working-directory: upstream
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.33 clean build -x test
+      - name: Finalize first-level pathfinder library for Fabric
+        run: |
+          python3 unified/finalize_baritone_113.py
+          test -s upstream/build/libs/AnkHack-Unified-1.21.11-1.0.33.jar
+      - name: Verify real compiled module variants
+        run: |
+          set -euo pipefail
+          JAR=$(find upstream/build/libs -maxdepth 1 -name 'AnkHack-Unified-*.jar' ! -name '*-sources.jar' ! -name '*-dev.jar' ! -name '*-javadoc.jar' | head -1)
+          test -s "$JAR"
+          # Baritone is an LGPL library, not a second hack client.
+          # A one-JAR installation may legitimately contain a replaceable library.
+          jar tf "$JAR" | grep -E 'META-INF/jars/.*baritone.*[.]jar'
+          BARITONE_LIB=$(jar tf "$JAR" | grep -E 'META-INF/jars/.*baritone.*[.]jar' | head -1)
+          unzip -p "$JAR" "$BARITONE_LIB" > /tmp/ankhack-baritone.jar
+          unzip -p /tmp/ankhack-baritone.jar fabric.mod.json | grep -F '1.21.11'
+          jar tf /tmp/ankhack-baritone.jar | grep -F 'baritone/api/BaritoneAPI.class'
+          NET_LIB=$(jar tf "$JAR" | grep -E 'META-INF/jars/.*nether-pathfinder.*[.]jar' | head -1)
+          test -n "$NET_LIB"
+          unzip -p "$JAR" "$NET_LIB" > /tmp/ankhack-nether-pathfinder.jar
+          jar tf /tmp/ankhack-nether-pathfinder.jar | grep -F 'dev/babbaj/pathfinder/NetherPathfinder.class'
+          unzip -p "$JAR" fabric.mod.json | grep -F '"id": "ankhack"'
+          unzip -p "$JAR" fabric.mod.json | grep -F '"name": "AnkHack"'
+          unzip -p "$JAR" fabric.mod.json | grep -F '"meteor-client:color": "255,201,55"'
+          ! unzip -p "$JAR" fabric.mod.json | grep -qF 'https://meteorclient.com/discord'
+          grep -F 'theme.window("AnkHack")' upstream/src/main/java/meteordevelopment/meteorclient/gui/screens/ModulesScreen.java
+          grep -F 'world-time-stall-warnings' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/misc/AnkServerDiagnostics.java
+          grep -F 'PlayerListEntry' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/misc/AnkServerDiagnostics.java
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.movement.Sprint$Mode' | grep -F 'LiquidOmni'
+          javap -classpath "$JAR" -p meteordevelopment.meteorclient.systems.modules.movement.Sprint | grep -F 'observeSprint()'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkAutoSwim.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkGlide.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/combat/AnkCombatRod.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkAutoSoup.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkToolSaver.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkNoServerSlot.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkViewLock.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkAntiBadEffects.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkLevitationControl.class'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoReplenish$Strategy' | grep -F 'ThunderSwap'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoEat$Implementation' | grep -F 'ThunderFast'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.FastUse$Implementation' | grep -F 'Thunder'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoGap$Implementation' | grep -F 'ThunderOffhand'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.combat.BowSpam$Implementation' | grep -F 'Thunder'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoTool$Implementation' | grep -F 'ThunderSpeed'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.combat.AutoArmor$Implementation' | grep -F 'ThunderPvP'
+          grep -F 'The old full-height categories' upstream/src/main/java/meteordevelopment/meteorclient/gui/screens/ModulesScreen.java
+          grep -F 'ank-category-picker' upstream/src/main/java/meteordevelopment/meteorclient/gui/screens/ModulesScreen.java
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/gui/screens/ModulesScreen.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/gui/themes/meteor/widgets/WMeteorModule.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkJetpack.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkAntiAttack.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkDurabilityAlert.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkElytraRecast.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/misc/AnkAutoDuel.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/misc/AnkAutoTpAccept.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/misc/AnkAutoFlyme.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/misc/AnkServerDiagnostics.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/misc/AnkAntiCrash.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/misc/AnkVisualRange.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/combat/AnkTriggerBot.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkElytraReplace.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkNoServerRotate.class'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.movement.FastClimb$Implementation' | grep -F 'WurstClassic'
+          # A class existing in a JAR is not enough: verify each module is registered once.
+          javap -c -p -classpath "$JAR" meteordevelopment.meteorclient.systems.modules.Modules > /tmp/ank_registry.txt
+          for symbol in AnkAutoSwim AnkGlide AnkCombatRod AnkAutoSoup AnkToolSaver AnkNoServerSlot AnkViewLock AnkAntiBadEffects AnkLevitationControl AnkJetpack AnkAntiAttack AnkDurabilityAlert AnkElytraRecast AnkAutoDuel AnkElytraReplace AnkNoServerRotate AnkAutoTpAccept AnkAutoFlyme AnkServerDiagnostics AnkTriggerBot AnkAntiCrash AnkVisualRange; do
+            count=$(grep -c "$symbol" /tmp/ank_registry.txt)
+            if test "$count" -lt 1; then echo "Missing registered gameplay module: $symbol"; exit 1; fi
+          done
+          unzip -p "$JAR" fabric.mod.json | grep -F '"license": "GPL-3.0"'
+          test "$(jar tf "$JAR" | grep -c 'meteordevelopment/meteorclient/systems/modules/player/AutoReplenish.class')" -eq 1
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoFish$BiteMode' | grep -F 'WurstMotion'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AntiAFK$Implementation' | grep -F 'ThunderTimed'
+          javap -classpath "$JAR" -p meteordevelopment.meteorclient.AnkVariantProfiles | grep -F 'choose('
+          unzip -p "$JAR" fabric.mod.json | grep -F 'nether-pathfinder-1.4.1.jar'
+          test "$(jar tf "$JAR" | grep -c 'meteordevelopment/meteorclient/systems/modules/movement/Flight.class')" -eq 1
+          ! jar tf "$JAR" | grep -Eq 'META-INF/jars/.*(wurst|liquidbounce|thunderhack|meteor-client)'
+          cp "$JAR" AnkHack-Unified-1.0.33-Fabric-1.21.11.jar
+          cat > WHAT_IS_IMPLEMENTED.txt <<'EOF'
+          AnkHack 1.0.33
+          - ServerDiagnostics: ping HUD and optional world-time stall warnings (not a proof of anticheat or TPS)
+          - AnkHack branded compact categories and gold menu icon
+          - Gold fabric metadata and original authors preserved
+          - Meteor original codebase and modules
+          - Wurst-based BoatFly and Flight variant
+          - Wurst-derived bobber motion option in AutoFish
+          - ThunderHack-based AutoLeave and AntiAFK idle mode
+          - LiquidBounce-derived Sprint modes: Legit and Omni
+          - AnkHack SmartMace, double-jump Flight, hashed per-server profiles
+          - Flight Auto switch based on server corrections
+          - AutoFish Auto based on observed fish in inventory (weak signal)
+          - Sprint Auto trials of Meteor/LiquidBounce variants using observed movement speed and corrections
+          - Native Wurst-derived AutoSwim, Glide
+          - LiquidBounce-inspired combat rod requiring manual aim; partial feature
+          - ThunderHack Reborn 1.21.11 source-derived AutoSoup, ToolSaver, NoServerSlot
+          - AutoReplenish: integrated ThunderSwap versus MeteorMerge under one Auto module
+          - AutoEat: MeteorSmart and ThunderFast native strategies with per-world Auto feedback
+          - AutoTool: MeteorScore and ThunderSpeed native strategies with per-world Auto feedback
+          - FastUse: Meteor/Thunder native cooldown strategies with conservative per-world Auto evidence
+          - AutoArmor: MeteorScore and ThunderPvP real scoring strategies in the same module, inventory-change Auto feedback
+          - GUI: search-first, description search, category-window layout fix, left alignment
+          - GUI: dark gold widgets, larger readable rows, interactive ON/OFF indicators
+          - GUI: low-resolution category height limits, functional scroll views, no overlapping help
+          - Wurst Jetpack integrated natively; FastClimb has MeteorModern/WurstClassic/Auto
+          - ThunderHack-derived AntiAttack, DurabilityAlert, ElytraRecast, AutoDuel, ElytraReplace, NoServerRotate native gameplay modules
+          - AutoTPaccept: restricted trusted-player accepts and bounded command cooldown
+          - AutoFlyme: optional server flight command with explicit-input guard, retry cooldown and session budget
+          - BowSpam: unified Meteor/ThunderHack implementations with manual choice and weak per-world Auto evidence
+          - ServerDiagnostics: displays correction observations and guards repeated Flight retries on servers
+          - Flight: Auto does not default to fake local flying abilities on unprivileged multiplayer; packet antikick no longer enabled by default
+          - TriggerBot: actual vanilla-range, friend-aware and attack-cooldown-aware combat logic
+          - Flight Auto now resets active variant when switching server/world without toggling module
+          - Auto Flight suppresses legacy Packet AntiKick movement edits on multiplayer, even with saved old settings
+          - GUI: compact category picker with one visible category and live search at 854x480
+          - Compact GUI: dynamic wide module panel and separate window config IDs for old dragged layouts
+          - AntiCrash: malformed incoming explosion/particle/position values filtered with bounded notices
+          - VisualRange: genuine friend-aware proximity tracking with entry/exit notifications
+          - AutoGap: Meteor inventory/potion strategy and ThunderHack offhand-health strategy with Auto server-profile evidence
+          - Auto registry: explicit variant family lookup; unknown hacks no longer inherit Flight modes
+          - Baritone: genuine 1.21.11 LGPL navigation library integrated within the single installable JAR (separable internal mod library)
+          - ViewLock, AntiBadEffects, LevitationControl from original ThunderHack source
+          NOT IMPLEMENTED: all modules or all modes from the user-provided clients.
+          DEVELOPMENT BUILD ONLY: NOT A FINISHED CLIENT, NOT GAMEPLAY VERIFIED.
+          Regtest: all six native gameplay modules are instantiated once by AnkHack registry.
+          NO gameplay test has been performed in Minecraft.
+          EOF
+          tar --exclude=.git --exclude=.gradle --exclude=build -czf AnkHack-Unified-1.0.33-SOURCE.tar.gz -C upstream .
+          ls -lh AnkHack-Unified-1.0.33-Fabric-1.21.11.jar
+      - name: Verify three new native classes are present in packaged JAR
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          JAR=$(find build/libs -maxdepth 1 -name 'AnkHack-Unified-*.jar' ! -name '*sources.jar' ! -name '*dev.jar' | head -1)
+          test -s "$JAR"
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkNoJumpDelay.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/combat/AnkPerfectRelease.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkWaterSpeed.class'
+      - name: Verify actual game launch and capture non-empty GUI
+        timeout-minutes: 8
+        working-directory: upstream
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb xdotool x11-utils imagemagick openbox libgl1-mesa-dri libglu1-mesa
+          Xvfb :98 -screen 0 1366x768x24 -nolisten tcp > ../xvfb.log 2>&1 &
+          export DISPLAY=:98 LIBGL_ALWAYS_SOFTWARE=1 MESA_GL_VERSION_OVERRIDE=3.3 ALSOFT_DRIVERS=null
+          openbox > ../openbox.log 2>&1 &
+          sleep 3
+          # Loom sometimes starts an additional Xvfb server. Search the server
+          # actually hosting Minecraft rather than grabbing an empty :98 screen.
+          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.33 runClient > ../ankhack-client-smoke.log 2>&1 &
+          CLIENT_PID=$!
+          found=""
+          target=""
+          for i in $(seq 1 115); do
+            # Loom's xvfb-run launches :99 with a private Xauthority cookie.
+            # A plain DISPLAY=:99 silently fails with "Authorization required".
+            if grep -qF 'Game crashed!' ../ankhack-client-smoke.log; then
+              echo "Minecraft crashed before GUI validation" | tee ../GUI_SMOKE_STATUS.txt
+              tail -90 ../ankhack-client-smoke.log
+              exit 1
+            fi
+            # Fabric Loom runs Minecraft under xvfb-run, with a private Xauthority.
+            # Identify the real display and cookie from the child Xvfb process.
+            xauth_file=$(ps -eo args | sed -nE 's/.*Xvfb :[0-9]+ .* -auth ([^ ]+).*/\1/p' | head -1 || true)
+            for display in :98 :99 :100 :101 :102 :103 :104 :105; do
+              if test -n "$xauth_file"; then
+                id=$(DISPLAY="$display" XAUTHORITY="$xauth_file" xdotool search --onlyvisible --name 'Minecraft|AnkHack|1.21.11' 2>/dev/null | head -1 || true)
+              else
+                id=$(DISPLAY="$display" xdotool search --onlyvisible --name 'Minecraft|AnkHack|1.21.11' 2>/dev/null | head -1 || true)
+              fi
+              if test -n "$id"; then found="$id"; target="$display"; break; fi
+            done
+            if test -n "$found"; then break; fi
+            if ! kill -0 "$CLIENT_PID" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          ps auxww | grep -E '[X]vfb|[j]ava' > ../SMOKE_PROCESSES.txt || true
+          for display in :98 :99 :100; do
+            echo "--- $display ---" >> ../WINDOW_TREE.txt
+            DISPLAY="$display" XAUTHORITY="$xauth_file" xwininfo -root -tree >> ../WINDOW_TREE.txt 2>&1 || true
+          done
+          if test -z "$found"; then
+            echo "FAIL: No visible Minecraft GUI; compilation alone is insufficient" | tee ../GUI_SMOKE_STATUS.txt
+            tail -70 ../ankhack-client-smoke.log
+            exit 1
+          fi
+          echo "Minecraft window $found on $target" | tee ../GUI_SMOKE_STATUS.txt
+          # Loom's own :99 display has no WM; activating a window fails
+          # even when the game itself is mapped. Capture its real X11 window.
+          WINDOW_ID=$(printf '0x%x' "$found")
+          COLOR_COUNT=0
+          for attempt in $(seq 1 18); do
+            DISPLAY="$target" XAUTHORITY="$xauth_file" import -window "$WINDOW_ID" ../AnkHack-GUI-virtual-display.png || true
+            if test -s ../AnkHack-GUI-virtual-display.png; then
+              COLOR_COUNT=$(identify -format '%k' ../AnkHack-GUI-virtual-display.png 2>/dev/null || echo 0)
+            fi
+            echo "Render pass $attempt: $COLOR_COUNT colors"
+            if test "$COLOR_COUNT" -gt 16; then break; fi
+            if grep -qF 'Game crashed!' ../ankhack-client-smoke.log; then exit 1; fi
+            sleep 4
+          done
+          identify ../AnkHack-GUI-virtual-display.png
+          test "$COLOR_COUNT" -gt 16
+          cp ../AnkHack-GUI-virtual-display.png ../AnkHack-Minecraft-startup.png
+          # First-run Minecraft asks for accessibility settings. Attempt to
+          # click Continue, then try the AnkHack click-GUI binding. Save an
+          # independent screenshot for actual visual review; never label it
+          # as verified just because the startup window contains colors.
+          DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool windowfocus "$found" || true
+          GEOM=$(DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool getwindowgeometry --shell "$found" || true)
+          WIDTH=$(printf '%s\n' "$GEOM" | sed -nE 's/^WIDTH=([0-9]+)$/\1/p')
+          HEIGHT=$(printf '%s\n' "$GEOM" | sed -nE 's/^HEIGHT=([0-9]+)$/\1/p')
+          if test -n "$WIDTH" && test -n "$HEIGHT"; then
+            DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool mousemove --window "$found" "$((WIDTH/2))" "$((HEIGHT*93/100))" || true
+            sleep 1
+            DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool click 1 || true
+          fi
+          # The first-run accessibility dialog may be unresponsive while
+          # textures finish loading. Retry the Continue click and GUI binding
+          # instead of treating a welcome-screen screenshot as a mod failure.
+          for trial in 1 2 3; do
+            sleep 3
+            if test -n "$WIDTH" && test -n "$HEIGHT"; then
+              DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool mousemove --sync --window "$found" "$((WIDTH/2))" "$((HEIGHT*93/100))" || true
+              DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool click 1 || true
+            fi
+            DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool key --clearmodifiers Return || true
+            sleep 4
+            DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool key --clearmodifiers Shift_R || true
+            sleep 2
+            if grep -qF '[AnkHack] ClickGUI modules screen initialized' ../ankhack-client-smoke.log; then
+              echo "ClickGUI opened on interaction trial $trial"
+              break
+            fi
+          done
+          DISPLAY="$target" XAUTHORITY="$xauth_file" import -window "$WINDOW_ID" ../AnkHack-after-right-shift.png || true
+          if test -s ../AnkHack-after-right-shift.png; then
+            identify ../AnkHack-after-right-shift.png
+          fi
+          # A screenshot of vanilla Minecraft is NOT proof the AnkHack menu
+          # opened. Require the in-client ModulesScreen initialization marker.
+          grep -F '[AnkHack] ClickGUI modules screen initialized' ../ankhack-client-smoke.log
+          # This second screenshot is evidence for manual review only.
+          # Startup passing is NOT evidence of successful GUI keybind.
+          grep -F 'Path Manager: Baritone' ../ankhack-client-smoke.log
+          if grep -qF 'Game crashed!' ../ankhack-client-smoke.log; then exit 1; fi
+          kill "$CLIENT_PID" 2>/dev/null || true
+          # Passing this test means only GUI startup, not gameplay compatibility.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: AnkHack-1.0.33-GUI-SMOKE-DEBUG
+          path: |
+            AnkHack-GUI-virtual-display.png
+            AnkHack-Minecraft-startup.png
+            AnkHack-after-right-shift.png
+            ankhack-client-smoke.log
+            GUI_SMOKE_STATUS.txt
+            WINDOW_TREE.txt
+            SMOKE_PROCESSES.txt
+            xvfb.log
+            openbox.log
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnkHack-1.0.33-DEVELOPMENT-ONLY
+          path: |
+            AnkHack-Unified-1.0.33-Fabric-1.21.11.jar
+            WHAT_IS_IMPLEMENTED.txt
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnkHack-1.0.33-GPL-Source
+          path: AnkHack-Unified-1.0.33-SOURCE.tar.gz
+          if-no-files-found: error
