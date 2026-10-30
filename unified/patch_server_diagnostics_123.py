@@ -59,6 +59,16 @@ new_world = """    private void onPostTick(TickEvent.Post event) {
         if (mc.player != null && mc.world != null) flightFeedback();"""
 assert text.count(old_world) == 1, "Cannot patch Flight Auto world-switch hook"
 text = text.replace(old_world, new_world, 1)
+# Persisted profiles from older builds can still contain Packet AntiKick.
+# Suppress the spoofed movement packets in Auto on multiplayer even when
+# that legacy setting remains selected. Manual mode remains explicit.
+old_packets = """    private void onSendPacket(PacketEvent.Send event) {
+        if (!(event.packet instanceof PlayerMoveC2SPacket packet) || antiKickMode.get() != AntiKickMode.Packet) return;"""
+new_packets = """    private void onSendPacket(PacketEvent.Send event) {
+        if (mode.get() == Mode.Auto && !mc.isInSingleplayer()) return;
+        if (!(event.packet instanceof PlayerMoveC2SPacket packet) || antiKickMode.get() != AntiKickMode.Packet) return;"""
+assert text.count(old_packets) == 1, "Cannot locate Flight Packet AntiKick hook"
+text = text.replace(old_packets, new_packets, 1)
 flight.write_text(text)
 
 notices = Path("upstream/ANKHACK_LICENSE_AND_ATTRIBUTIONS.md")
