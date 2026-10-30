@@ -26,13 +26,14 @@ jobs:
           P=ankhack/src/main/java/se/ankclient
           cat v06/NativeClickGui.java.1 v06/NativeClickGui.java.2 > "$P/NativeClickGui.java"
           cp v06/UnifiedHacks.java "$P/UnifiedHacks.java"
+          cp v06/MoreHacks.java "$P/MoreHacks.java"
           cp v06/OverlayLite.java "$P/OverlayLite.java"
           python3 - <<'PY'
           from pathlib import Path
           p=Path('ankhack/src/main/java/se/ankclient/AnkHack.java')
           s=p.read_text()
           assert 'Features.registerAll(MODULES);' in s
-          s=s.replace('Features.registerAll(MODULES);','Features.registerAll(MODULES);\n        UnifiedHacks.registerAll(MODULES);')
+          s=s.replace('Features.registerAll(MODULES);','Features.registerAll(MODULES);\n        UnifiedHacks.registerAll(MODULES);\n        MoreHacks.registerAll(MODULES);')
           assert 'Overlay.render(' in s
           s=s.replace('Overlay.render(', 'OverlayLite.render(')
           p.write_text(s)
@@ -40,8 +41,11 @@ jobs:
           s=p.read_text().replace('import net.minecraft.item.SwordItem;', 'import net.minecraft.registry.tag.ItemTags;')
           s=s.replace('stack.getItem() instanceof SwordItem', 'stack.isIn(ItemTags.SWORDS)')
           p.write_text(s)
+          assert 'GLFW.GLFW_KEY_F9' in s
+          s=s.replace('GLFW.GLFW_KEY_F9','GLFW.GLFW_KEY_RIGHT_SHIFT')
+          p.write_text(s)
           p=Path('ankhack/gradle.properties')
-          s=p.read_text().replace('mod_version=0.5.0','mod_version=0.6.0')
+          s=p.read_text().replace('mod_version=0.5.0','mod_version=0.6.1')
           p.write_text(s)
           PY
       - name: Compile Fabric client (Java 21)
@@ -50,13 +54,14 @@ jobs:
       - name: Verify 0.6 single-client artifact
         run: |
           set -euo pipefail
-          JAR=ankhack/build/libs/AnkHack-Native-1.21.11-0.6.0.jar
+          JAR=ankhack/build/libs/AnkHack-Native-1.21.11-0.6.1.jar
           test -s "$JAR"
           unzip -p "$JAR" fabric.mod.json | grep -F '"id":"ankhack"'
           jar tf "$JAR" | grep -q 'se/ankclient/UnifiedHacks.class'
+          jar tf "$JAR" | grep -q 'se/ankclient/MoreHacks.class'
           ! jar tf "$JAR" | grep -Eq '^META-INF/jars/|^meteordevelopment/|^net/wurstclient/|^thunder/hack/'
       - uses: actions/upload-artifact@v4
         with:
-          name: AnkHack-0.6-Native-1.21.11
+          name: AnkHack-0.6.1-Native-1.21.11
           path: ankhack/build/libs/AnkHack-Native-1.21.11-0.6.0.jar
           if-no-files-found: error
