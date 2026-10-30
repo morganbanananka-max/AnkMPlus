@@ -196,13 +196,21 @@ jobs:
             exit 1
           fi
           echo "Minecraft window $found on $target" | tee ../GUI_SMOKE_STATUS.txt
-          DISPLAY="$target" XAUTHORITY="$auth" xdotool windowactivate --sync "$found" || true
-          sleep 4
-          DISPLAY="$target" XAUTHORITY="$auth" import -window root ../AnkHack-GUI-virtual-display.png
+          # Loom's own :99 display has no WM; activating a window fails
+          # even when the game itself is mapped. Capture its real X11 window.
+          WINDOW_ID=$(printf '0x%x' "$found")
+          COLOR_COUNT=0
+          for attempt in $(seq 1 18); do
+            DISPLAY="$target" XAUTHORITY="$auth" import -window "$WINDOW_ID" ../AnkHack-GUI-virtual-display.png || true
+            if test -s ../AnkHack-GUI-virtual-display.png; then
+              COLOR_COUNT=$(identify -format '%k' ../AnkHack-GUI-virtual-display.png 2>/dev/null || echo 0)
+            fi
+            echo "Render pass $attempt: $COLOR_COUNT colors"
+            if test "$COLOR_COUNT" -gt 16; then break; fi
+            if grep -qF 'Game crashed!' ../ankhack-client-smoke.log; then exit 1; fi
+            sleep 4
+          done
           identify ../AnkHack-GUI-virtual-display.png
-          test $(stat -c%s ../AnkHack-GUI-virtual-display.png) -gt 2000
-          COLOR_COUNT=$(identify -format '%k' ../AnkHack-GUI-virtual-display.png)
-          echo "Distinct image colors: $COLOR_COUNT"
           test "$COLOR_COUNT" -gt 16
           grep -F 'Path Manager: Baritone' ../ankhack-client-smoke.log
           if grep -qF 'Game crashed!' ../ankhack-client-smoke.log; then exit 1; fi
