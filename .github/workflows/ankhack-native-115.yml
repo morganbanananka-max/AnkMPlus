@@ -18,6 +18,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - name: Verify native registry patch (offline, deterministic)
+        run: |
+          python3 -m py_compile unified/patch_native_115.py unified/tests/test_native_115.py
+          python3 -m unittest discover -v -s unified/tests -p 'test_native_115.py'
       - name: Fetch official, pinned source version for Minecraft 1.21.11
         run: |
           git clone https://github.com/MeteorDevelopment/meteor-client.git upstream
