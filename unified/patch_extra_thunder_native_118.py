@@ -20,7 +20,7 @@ for name,area in targets.items():
 reg=root/"Modules.java"
 s=reg.read_text()
 anchors={
-    "        add(new AnkCombatRod());":"        add(new AnkCombatRod());\\n        add(new AnkAutoBuff());",
+    "        add(new AnkCombatRod());":"        add(new AnkCombatRod());\n        add(new AnkAutoBuff());",
     "        add(new AutoReconnect());":"        add(new AutoReconnect());\n        add(new AnkAutoDuel());",
     "        add(new AutoRespawn());":"        add(new AutoRespawn());\n        add(new AnkElytraReplace());\n        add(new AnkNoServerRotate());",
 }
