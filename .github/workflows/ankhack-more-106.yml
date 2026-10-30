@@ -50,6 +50,7 @@ jobs:
           jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkAutoSwim.class'
           jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkGlide.class'
           jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/combat/AnkCombatRod.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkAutoSoup.class'
           javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoFish$BiteMode' | grep -F 'WurstMotion'
           javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AntiAFK$Implementation' | grep -F 'ThunderTimed'
           javap -classpath "$JAR" -p meteordevelopment.meteorclient.AnkVariantProfiles | grep -F 'choose('
@@ -69,6 +70,7 @@ jobs:
           - Sprint Auto trials of Meteor/LiquidBounce variants using observed movement speed and corrections
           - Native Wurst-derived AutoSwim, Glide
           - LiquidBounce-inspired combat rod requiring manual aim; partial feature
+          - ThunderHack Reborn 1.21.11 source-derived AutoSoup
           NOT IMPLEMENTED: all modules or all modes from the user-provided clients.
           DEVELOPMENT BUILD ONLY: NOT A FINISHED CLIENT, NOT GAMEPLAY VERIFIED.
           NO gameplay test has been performed in Minecraft.
