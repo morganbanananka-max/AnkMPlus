@@ -24,6 +24,15 @@ jobs:
           base64 --decode ankhack-native-05.tar.gz.b64 | tar -xz -C ankhack
           test -f ankhack/src/main/resources/fabric.mod.json
           test -f ankhack/src/main/java/se/ankclient/NativeClickGui.java
+      - name: Adapt hotbar sword detection to 1.21.11 tags
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("ankhack/src/main/java/se/ankclient/PortedFeatures.java")
+          s=p.read_text().replace("import net.minecraft.item.SwordItem;","import net.minecraft.registry.tag.ItemTags;")
+          s=s.replace("stack.getItem() instanceof SwordItem","stack.isIn(ItemTags.SWORDS)")
+          p.write_text(s)
+          PY
       - name: Build remapped Fabric mod
         working-directory: ankhack
         run: gradle --no-daemon --console=plain clean build
