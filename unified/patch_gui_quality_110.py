@@ -45,6 +45,13 @@ edit("""            double h = theme.scale(40);
 """            double x = this.x + pad;
             double y = this.y;
             double rowHeight = 0;""")
+# The original controller measures cell.width AFTER testing for overflow.
+# Force an up-to-date width before wrapping so rightmost panels cannot run
+# beyond small (854px) Minecraft windows, and recompute actual row height.
+edit("""                if (x + cell.width > windowWidth) {""",
+"""                cell.width = cell.widget().width;
+                cell.height = cell.widget().height;
+                if (x + cell.width > windowWidth) {""")
 edit("""                if (x + cell.width > windowWidth) {
                     x = x + pad;
                     y += h;
