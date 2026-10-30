@@ -8,6 +8,7 @@ from shutil import copy2
 root=Path("upstream/src/main/java/meteordevelopment/meteorclient/systems/modules")
 targets={
     "AnkAutoDuel.java":"misc",
+    "AnkAutoBuff.java":"combat",
     "AnkElytraReplace.java":"player",
     "AnkNoServerRotate.java":"player",
 }
@@ -19,6 +20,7 @@ for name,area in targets.items():
 reg=root/"Modules.java"
 s=reg.read_text()
 anchors={
+    "        add(new AnkCombatRod());":"        add(new AnkCombatRod());\\n        add(new AnkAutoBuff());",
     "        add(new AutoReconnect());":"        add(new AutoReconnect());\n        add(new AnkAutoDuel());",
     "        add(new AutoRespawn());":"        add(new AutoRespawn());\n        add(new AnkElytraReplace());\n        add(new AnkNoServerRotate());",
 }
@@ -28,6 +30,7 @@ for old,new in anchors.items():
 reg.write_text(s)
 with Path("upstream/ANKHACK_LICENSE_AND_ATTRIBUTIONS.md").open("a") as f:
     f.write("""
+- AnkAutoBuff: selective splash buffs and instant healing, conservative vanilla interaction, no packet flood.
 Additional ThunderHack Reborn 1.21.11 GPL-3.0 adaptations:
 - AnkAutoDuel: explicit username-matched duel requests, accept mode only
 - AnkElytraReplace: safer vanilla inventory swaps with configurable thresholds
