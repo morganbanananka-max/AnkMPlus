@@ -14,7 +14,7 @@ def edit(before,after):
     s=s.replace(before,after,1)
 
 edit("        controller = add(new WCategoryController()).widget();",
-     "        controller = add(new WCategoryController()).top().widget();")
+     "        controller = add(new WCategoryController()).top().widget();\n        System.out.println(\"[AnkHack] ClickGUI modules screen initialized\");")
 
 edit("""        // Help
         WVerticalList help = add(theme.verticalList()).pad(4).bottom().widget();
