@@ -25,7 +25,10 @@ s=s.replace(old,'''    // Baritone is a real 1.21.11 LGPL-3.0 pathfinding librar
     // Nested Jar-in-Jar dependencies are not loaded recursively by Fabric.
     // Extract the LGPL nether-pathfinder from the pinned upstream Baritone JAR
     // and include it as a first-level replaceable library instead.
-    modInclude(files("libs/nether-pathfinder-1.4.1.jar"))''')
+    // Local file dependency lacks Gradle module capabilities, so Loom cannot
+    // include it via processIncludeJars. Put it on dev runtime classpath here.
+    // finalize_baritone_113.py packages the *same* jar first-level for release.
+    runtimeOnly(files("libs/nether-pathfinder-1.4.1.jar"))''')
 build.write_text(s)
 
 notice=root/"ANKHACK_LICENSE_AND_ATTRIBUTIONS.md"
