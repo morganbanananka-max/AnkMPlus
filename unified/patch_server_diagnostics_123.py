@@ -42,6 +42,23 @@ text = text.replace(old, new, 1)
 old = ".defaultValue(AntiKickMode.Packet)"
 assert text.count(old)==1, f"AntiKick default anchor: {text.count(old)}"
 text = text.replace(old, ".defaultValue(AntiKickMode.None)", 1)
+# If Flight stays enabled while the player changes worlds or servers,
+# discard the prior session's active variant and select for the new context.
+# This is especially important after switching from Creative singleplayer to
+# a multiplayer server with restrictive movement checks.
+old_world = """    private void onPostTick(TickEvent.Post event) {
+        if (mc.player != null && mc.world != null) flightFeedback();"""
+new_world = """    private void onPostTick(TickEvent.Post event) {
+        if (mc.player != null && mc.world != null && mode.get() == Mode.Auto) {
+            String connectedWorld = AnkVariantProfiles.serverKey(mc);
+            if (!connectedWorld.equals(activeServer)) {
+                if (activeVariant == Mode.Abilities && !mc.player.isSpectator()) abilitiesOff();
+                resetVariantSession();
+            }
+        }
+        if (mc.player != null && mc.world != null) flightFeedback();"""
+assert text.count(old_world) == 1, "Cannot patch Flight Auto world-switch hook"
+text = text.replace(old_world, new_world, 1)
 flight.write_text(text)
 
 notices = Path("upstream/ANKHACK_LICENSE_AND_ATTRIBUTIONS.md")
