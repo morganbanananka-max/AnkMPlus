@@ -61,8 +61,10 @@ for lang in (assets/"ankhack"/"lang").glob("*.json"):
 target=ROOT/"src/main/java/meteordevelopment/meteorclient/systems/modules"
 shutil.copy2("unified/native/AnkBoatFly.java",target/"movement/AnkBoatFly.java")
 shutil.copy2("unified/native/AnkAutoLeave.java",target/"misc/AnkAutoLeave.java")
+shutil.copy2("unified/native/AnkSmartMace.java",target/"combat/AnkSmartMace.java")
 modules="src/main/java/meteordevelopment/meteorclient/systems/modules/Modules.java"
 update(modules,"        add(new AutoWalk());","        add(new AutoWalk());\n        add(new AnkBoatFly());")
+update(modules,"        add(new AutoCrystal());","        add(new AutoCrystal());\\n        add(new AnkSmartMace());")
 # Register Thunder module in misc category, avoiding duplicates.
 p=ROOT/modules
 s=p.read_text()
