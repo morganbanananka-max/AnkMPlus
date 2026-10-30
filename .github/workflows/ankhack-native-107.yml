@@ -104,6 +104,51 @@ jobs:
           EOF
           tar --exclude=.git --exclude=.gradle --exclude=build -czf AnkHack-Unified-1.0.10-SOURCE.tar.gz -C upstream .
           ls -lh AnkHack-Unified-1.0.10-Fabric-1.21.11.jar
+      - name: Attempt automated Minecraft GUI launch and screenshot
+        continue-on-error: true
+        timeout-minutes: 8
+        working-directory: upstream
+        run: |
+          set -u
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb xdotool imagemagick libgl1-mesa-dri libglu1-mesa
+          Xvfb :98 -screen 0 1366x768x24 -nolisten tcp > ../xvfb.log 2>&1 &
+          DISPLAY=:98
+          export DISPLAY LIBGL_ALWAYS_SOFTWARE=1 MESA_GL_VERSION_OVERRIDE=3.3
+          sleep 3
+          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.10 runClient > ../ankhack-client-smoke.log 2>&1 &
+          CLIENT_PID=$!
+          found=""
+          for i in $(seq 1 150); do
+            found=$(xdotool search --onlyvisible --name 'Minecraft' 2>/dev/null | head -1 || true)
+            if test -n "$found"; then break; fi
+            if ! kill -0 "$CLIENT_PID" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if test -n "$found"; then
+            echo "Minecraft GUI window found: $found" | tee ../GUI_SMOKE_STATUS.txt
+            xdotool windowactivate --sync "$found" || true
+            sleep 8
+            xdotool key --clearmodifiers Shift_R || true
+            sleep 5
+            import -window root ../AnkHack-GUI-virtual-display.png || true
+            identify ../AnkHack-GUI-virtual-display.png || true
+          else
+            echo "No Minecraft window appeared: see full game log. This is NOT a passed runtime test." | tee ../GUI_SMOKE_STATUS.txt
+          fi
+          kill "$CLIENT_PID" 2>/dev/null || true
+          sleep 2
+          test -n "$found"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: AnkHack-1.0.10-GUI-SMOKE-DEBUG
+          path: |
+            AnkHack-GUI-virtual-display.png
+            ankhack-client-smoke.log
+            GUI_SMOKE_STATUS.txt
+            xvfb.log
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
           name: AnkHack-1.0.10-DEVELOPMENT-ONLY
