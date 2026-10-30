@@ -54,10 +54,13 @@ jobs:
           jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkAutoSoup.class'
           jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkToolSaver.class'
           jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkNoServerSlot.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkViewLock.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkAntiBadEffects.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkLevitationControl.class'
           javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoReplenish$Strategy' | grep -F 'ThunderSwap'
           # A class existing in a JAR is not enough: verify each module is registered once.
           javap -c -p -classpath "$JAR" meteordevelopment.meteorclient.systems.modules.Modules > /tmp/ank_registry.txt
-          for symbol in AnkAutoSwim AnkGlide AnkCombatRod AnkAutoSoup AnkToolSaver AnkNoServerSlot; do
+          for symbol in AnkAutoSwim AnkGlide AnkCombatRod AnkAutoSoup AnkToolSaver AnkNoServerSlot AnkViewLock AnkAntiBadEffects AnkLevitationControl; do
             count=$(grep -c "$symbol" /tmp/ank_registry.txt)
             if test "$count" -lt 1; then echo "Missing registered gameplay module: $symbol"; exit 1; fi
           done
@@ -84,6 +87,7 @@ jobs:
           - LiquidBounce-inspired combat rod requiring manual aim; partial feature
           - ThunderHack Reborn 1.21.11 source-derived AutoSoup, ToolSaver, NoServerSlot
           - AutoReplenish: integrated ThunderSwap versus MeteorMerge under one Auto module
+          - ViewLock, AntiBadEffects, LevitationControl from original ThunderHack source
           NOT IMPLEMENTED: all modules or all modes from the user-provided clients.
           DEVELOPMENT BUILD ONLY: NOT A FINISHED CLIENT, NOT GAMEPLAY VERIFIED.
           Regtest: all six native gameplay modules are instantiated once by AnkHack registry.
