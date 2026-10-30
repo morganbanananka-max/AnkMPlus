@@ -157,7 +157,7 @@ jobs:
           sleep 3
           # Loom sometimes starts an additional Xvfb server. Search the server
           # actually hosting Minecraft rather than grabbing an empty :98 screen.
-          CI=false ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.13 runClient > ../ankhack-client-smoke.log 2>&1 &
+          env -u CI ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.13 runClient > ../ankhack-client-smoke.log 2>&1 &
           CLIENT_PID=$!
           found=""
           target=""
@@ -191,6 +191,9 @@ jobs:
           DISPLAY="$target" import -window root ../AnkHack-GUI-virtual-display.png
           identify ../AnkHack-GUI-virtual-display.png
           test $(stat -c%s ../AnkHack-GUI-virtual-display.png) -gt 2000
+          COLOR_COUNT=$(identify -format '%k' ../AnkHack-GUI-virtual-display.png)
+          echo "Distinct image colors: $COLOR_COUNT"
+          test "$COLOR_COUNT" -gt 16
           grep -F 'Path Manager: Baritone' ../ankhack-client-smoke.log
           if grep -qF 'Game crashed!' ../ankhack-client-smoke.log; then exit 1; fi
           kill "$CLIENT_PID" 2>/dev/null || true
