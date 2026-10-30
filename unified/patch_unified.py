@@ -98,4 +98,32 @@ https://github.com/Pan4ur/ThunderHack-Recode (GPL-3.0)
 Copyright notices and LICENSE remain in source. No cracked proprietary client binaries.
 Build experimental, NOT equivalent to all original clients.
 """)
+
+# AnkHack's own creative-style double-jump-to-toggle Flight.
+# This integrates with the existing Flight module, not a separate flight implementation.
+game=ROOT/"src/main/java/meteordevelopment/meteorclient"
+shutil.copy2("unified/native/AnkDoubleJumpFlight.java",game/"AnkDoubleJumpFlight.java")
+flight="src/main/java/meteordevelopment/meteorclient/systems/modules/movement/Flight.java"
+update(flight,
+ '    private final Setting<Double> speed = sgGeneral.add(new DoubleSetting.Builder()',
+ '''    private final Setting<Boolean> ankDoubleTap = sgGeneral.add(new BoolSetting.Builder()
+        .name("double-tap-jump")
+        .description("Double-tap Jump to turn Flight on or off, like Creative mode.")
+        .defaultValue(true).build());
+
+    private final Setting<Integer> ankDoubleTapWindow = sgGeneral.add(new IntSetting.Builder()
+        .name("double-tap-window-ms")
+        .description("Maximum milliseconds between the two Jump presses.")
+        .defaultValue(350).min(180).sliderMax(650)
+        .visible(ankDoubleTap::get).build());
+
+    public boolean ankhackDoubleJumpEnabled() { return ankDoubleTap.get(); }
+
+    public int ankhackDoubleJumpWindowMs() { return ankDoubleTapWindow.get(); }
+
+    private final Setting<Double> speed = sgGeneral.add(new DoubleSetting.Builder()''')
+update("src/main/java/meteordevelopment/meteorclient/MeteorClient.java",
+    "        Systems.load();",
+    "        Systems.load();\n\n        // Global input handler so Flight can be enabled while its module is off.\n        EVENT_BUS.subscribe(new AnkDoubleJumpFlight());")
+
 print("Patched one unified client source project")
