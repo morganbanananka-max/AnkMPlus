@@ -13,6 +13,9 @@ def edit(before,after):
     if count!=1:raise RuntimeError("Responsive GUI patch expected one anchor, got "+str(count)+": "+repr(before[:90]))
     s=s.replace(before,after,1)
 
+edit("        controller = add(new WCategoryController()).widget();",
+     "        controller = add(new WCategoryController()).top().widget();")
+
 edit("""        // Help
         WVerticalList help = add(theme.verticalList()).pad(4).bottom().widget();
         help.add(theme.label("Left click - Toggle module"));
