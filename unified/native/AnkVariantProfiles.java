@@ -119,7 +119,7 @@ public final class AnkVariantProfiles {
         return choice;
     }
     public static String nextUntested(String server,String module,String current){
-        for(String v:VARIANTS){
+        for(String v:variants(module)){
             if(v.equals(current))continue;
             if(!hasEvidence(server,module,v))return v;
         }
