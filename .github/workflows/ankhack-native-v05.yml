@@ -1,0 +1,39 @@
+name: Build AnkHack 0.5 Native (single integrated client)
+on:
+  push:
+    branches: [ankhack-native-v05]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.1'
+      - name: Extract one-codebase AnkHack source
+        run: |
+          mkdir -p ankhack
+          base64 --decode ankhack-native-05.tar.gz.b64 | tar -xz -C ankhack
+          test -f ankhack/src/main/resources/fabric.mod.json
+          test -f ankhack/src/main/java/se/ankclient/NativeClickGui.java
+      - name: Build remapped Fabric mod
+        working-directory: ankhack
+        run: gradle --no-daemon --console=plain clean build
+      - name: Verify genuine single-client JAR
+        run: |
+          test -s ankhack/build/libs/AnkHack-Native-1.21.11-0.5.0.jar
+          unzip -p ankhack/build/libs/AnkHack-Native-1.21.11-0.5.0.jar fabric.mod.json | grep -F '"id":"ankhack"'
+          ! jar tf ankhack/build/libs/AnkHack-Native-1.21.11-0.5.0.jar | grep -Eq '^META-INF/jars/|^meteordevelopment/|^net/wurstclient/|^thunder/hack/'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnkHack-0.5.0-Native-1.21.11-Fabric-0.19.3
+          path: ankhack/build/libs/AnkHack-Native-1.21.11-0.5.0.jar
+          if-no-files-found: error
