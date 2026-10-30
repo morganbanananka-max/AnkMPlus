@@ -164,7 +164,6 @@ jobs:
           for i in $(seq 1 115); do
             # Loom's xvfb-run launches :99 with a private Xauthority cookie.
             # A plain DISPLAY=:99 silently fails with "Authorization required".
-            auth=$(find /tmp -maxdepth 2 -path '/tmp/xvfb-run.*/Xauthority' -type f -print -quit 2>/dev/null || true)
             if grep -qF 'Game crashed!' ../ankhack-client-smoke.log; then
               echo "Minecraft crashed before GUI validation" | tee ../GUI_SMOKE_STATUS.txt
               tail -90 ../ankhack-client-smoke.log
@@ -188,7 +187,7 @@ jobs:
           ps auxww | grep -E '[X]vfb|[j]ava' > ../SMOKE_PROCESSES.txt || true
           for display in :98 :99 :100; do
             echo "--- $display ---" >> ../WINDOW_TREE.txt
-            DISPLAY="$display" XAUTHORITY="$auth" xwininfo -root -tree >> ../WINDOW_TREE.txt 2>&1 || true
+            DISPLAY="$display" XAUTHORITY="$xauth_file" xwininfo -root -tree >> ../WINDOW_TREE.txt 2>&1 || true
           done
           if test -z "$found"; then
             echo "FAIL: No visible Minecraft GUI; compilation alone is insufficient" | tee ../GUI_SMOKE_STATUS.txt
@@ -201,7 +200,7 @@ jobs:
           WINDOW_ID=$(printf '0x%x' "$found")
           COLOR_COUNT=0
           for attempt in $(seq 1 18); do
-            DISPLAY="$target" XAUTHORITY="$auth" import -window "$WINDOW_ID" ../AnkHack-GUI-virtual-display.png || true
+            DISPLAY="$target" XAUTHORITY="$xauth_file" import -window "$WINDOW_ID" ../AnkHack-GUI-virtual-display.png || true
             if test -s ../AnkHack-GUI-virtual-display.png; then
               COLOR_COUNT=$(identify -format '%k' ../AnkHack-GUI-virtual-display.png 2>/dev/null || echo 0)
             fi
