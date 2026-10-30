@@ -43,6 +43,7 @@ jobs:
           python3 unified/patch_autoarmor_114.py
           python3 unified/patch_gui_responsive_115.py
           python3 unified/patch_extra_thunder_native_118.py
+          python3 unified/patch_fastuse_variants_120.py
           # Fully reproducible library source: exact official Baritone 1.21.11
           # artifact with the same SHA256 as the user-supplied JAR.
           mkdir -p upstream/libs
@@ -64,11 +65,11 @@ jobs:
         working-directory: upstream
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.19 clean build -x test
+          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.20 clean build -x test
       - name: Finalize first-level pathfinder library for Fabric
         run: |
           python3 unified/finalize_baritone_113.py
-          test -s upstream/build/libs/AnkHack-Unified-1.21.11-1.0.19.jar
+          test -s upstream/build/libs/AnkHack-Unified-1.21.11-1.0.20.jar
       - name: Verify real compiled module variants
         run: |
           set -euo pipefail
@@ -99,6 +100,7 @@ jobs:
           jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkLevitationControl.class'
           javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoReplenish$Strategy' | grep -F 'ThunderSwap'
           javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoEat$Implementation' | grep -F 'ThunderFast'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.FastUse$Implementation' | grep -F 'Thunder'
           javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoTool$Implementation' | grep -F 'ThunderSpeed'
           javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.combat.AutoArmor$Implementation' | grep -F 'ThunderPvP'
           grep -F 'The old full-height categories' upstream/src/main/java/meteordevelopment/meteorclient/gui/screens/ModulesScreen.java
@@ -126,9 +128,9 @@ jobs:
           unzip -p "$JAR" fabric.mod.json | grep -F 'nether-pathfinder-1.4.1.jar'
           test "$(jar tf "$JAR" | grep -c 'meteordevelopment/meteorclient/systems/modules/movement/Flight.class')" -eq 1
           ! jar tf "$JAR" | grep -Eq 'META-INF/jars/.*(wurst|liquidbounce|thunderhack|meteor-client)'
-          cp "$JAR" AnkHack-Unified-1.0.19-Fabric-1.21.11.jar
+          cp "$JAR" AnkHack-Unified-1.0.20-Fabric-1.21.11.jar
           cat > WHAT_IS_IMPLEMENTED.txt <<'EOF'
-          AnkHack 1.0.19
+          AnkHack 1.0.20
           - Meteor original codebase and modules
           - Wurst-based BoatFly and Flight variant
           - Wurst-derived bobber motion option in AutoFish
@@ -144,6 +146,7 @@ jobs:
           - AutoReplenish: integrated ThunderSwap versus MeteorMerge under one Auto module
           - AutoEat: MeteorSmart and ThunderFast native strategies with per-world Auto feedback
           - AutoTool: MeteorScore and ThunderSpeed native strategies with per-world Auto feedback
+          - FastUse: Meteor/Thunder native cooldown strategies with conservative per-world Auto evidence
           - AutoArmor: MeteorScore and ThunderPvP real scoring strategies in the same module, inventory-change Auto feedback
           - GUI: search-first, description search, category-window layout fix, left alignment
           - GUI: dark gold widgets, larger readable rows, interactive ON/OFF indicators
@@ -157,8 +160,8 @@ jobs:
           Regtest: all six native gameplay modules are instantiated once by AnkHack registry.
           NO gameplay test has been performed in Minecraft.
           EOF
-          tar --exclude=.git --exclude=.gradle --exclude=build -czf AnkHack-Unified-1.0.19-SOURCE.tar.gz -C upstream .
-          ls -lh AnkHack-Unified-1.0.19-Fabric-1.21.11.jar
+          tar --exclude=.git --exclude=.gradle --exclude=build -czf AnkHack-Unified-1.0.20-SOURCE.tar.gz -C upstream .
+          ls -lh AnkHack-Unified-1.0.20-Fabric-1.21.11.jar
       - name: Verify actual game launch and capture non-empty GUI
         timeout-minutes: 8
         working-directory: upstream
@@ -172,7 +175,7 @@ jobs:
           sleep 3
           # Loom sometimes starts an additional Xvfb server. Search the server
           # actually hosting Minecraft rather than grabbing an empty :98 screen.
-          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.19 runClient > ../ankhack-client-smoke.log 2>&1 &
+          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.20 runClient > ../ankhack-client-smoke.log 2>&1 &
           CLIENT_PID=$!
           found=""
           target=""
@@ -274,7 +277,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: AnkHack-1.0.19-GUI-SMOKE-DEBUG
+          name: AnkHack-1.0.20-GUI-SMOKE-DEBUG
           path: |
             AnkHack-GUI-virtual-display.png
             AnkHack-Minecraft-startup.png
@@ -288,13 +291,13 @@ jobs:
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
-          name: AnkHack-1.0.19-DEVELOPMENT-ONLY
+          name: AnkHack-1.0.20-DEVELOPMENT-ONLY
           path: |
-            AnkHack-Unified-1.0.19-Fabric-1.21.11.jar
+            AnkHack-Unified-1.0.20-Fabric-1.21.11.jar
             WHAT_IS_IMPLEMENTED.txt
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
-          name: AnkHack-1.0.19-GPL-Source
-          path: AnkHack-Unified-1.0.19-SOURCE.tar.gz
+          name: AnkHack-1.0.20-GPL-Source
+          path: AnkHack-Unified-1.0.20-SOURCE.tar.gz
           if-no-files-found: error
