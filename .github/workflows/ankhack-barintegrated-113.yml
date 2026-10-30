@@ -152,7 +152,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq xvfb xdotool x11-utils imagemagick openbox libgl1-mesa-dri libglu1-mesa
           Xvfb :98 -screen 0 1366x768x24 -nolisten tcp > ../xvfb.log 2>&1 &
-          export DISPLAY=:98 LIBGL_ALWAYS_SOFTWARE=1 MESA_GL_VERSION_OVERRIDE=3.3
+          export DISPLAY=:98 LIBGL_ALWAYS_SOFTWARE=1 MESA_GL_VERSION_OVERRIDE=3.3 ALSOFT_DRIVERS=null
           openbox > ../openbox.log 2>&1 &
           sleep 3
           # Loom sometimes starts an additional Xvfb server. Search the server
@@ -170,8 +170,15 @@ jobs:
               tail -90 ../ankhack-client-smoke.log
               exit 1
             fi
+            # Fabric Loom runs Minecraft under xvfb-run, with a private Xauthority.
+            # Identify the real display and cookie from the child Xvfb process.
+            xauth_file=$(ps -eo args | sed -nE 's/.*Xvfb :[0-9]+ .* -auth ([^ ]+).*/\\1/p' | head -1 || true)
             for display in :98 :99 :100 :101 :102 :103 :104 :105; do
-              id=$(DISPLAY="$display" XAUTHORITY="$auth" xdotool search --onlyvisible --name 'Minecraft|AnkHack|1.21.11' 2>/dev/null | head -1 || true)
+              if test -n "$xauth_file"; then
+                id=$(DISPLAY="$display" XAUTHORITY="$xauth_file" xdotool search --onlyvisible --name 'Minecraft|AnkHack|1.21.11' 2>/dev/null | head -1 || true)
+              else
+                id=$(DISPLAY="$display" xdotool search --onlyvisible --name 'Minecraft|AnkHack|1.21.11' 2>/dev/null | head -1 || true)
+              fi
               if test -n "$id"; then found="$id"; target="$display"; break; fi
             done
             if test -n "$found"; then break; fi
