@@ -1,0 +1,189 @@
+name: AnkHack integrated Baritone and GUI runtime verification
+on:
+  push:
+    branches: [ankhack-barintegrated-113]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ankhack-dev-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Fetch official, pinned source version for Minecraft 1.21.11
+        run: |
+          git clone https://github.com/MeteorDevelopment/meteor-client.git upstream
+          cd upstream
+          git checkout 02973974afdfb715b193813959a837695049f7c1
+          test "$(git rev-parse HEAD)" = "02973974afdfb715b193813959a837695049f7c1"
+      - name: Build unified source without nesting client jars
+        run: |
+          set -euo pipefail
+          python3 unified/patch_unified.py
+          python3 unified/patch_flight_variants.py
+          python3 unified/patch_crossclient_103.py
+          python3 unified/patch_sprint_auto.py
+          python3 unified/patch_more_native.py
+          python3 unified/patch_replenish_107.py
+          python3 unified/patch_autoeat_variants_108.py
+          python3 unified/patch_autotool_variants_109.py
+          python3 unified/patch_gui_quality_110.py
+          python3 unified/patch_gui_polish_111.py
+          python3 unified/patch_fastclimb_variants_112.py
+          python3 unified/patch_baritone_113.py
+          grep -F 'LiquidOmni' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/movement/Sprint.java
+          grep -F 'observeSprint()' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/movement/Sprint.java
+          grep -F 'WurstMotion' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/player/AutoFish.java
+          grep -F 'ThunderTimed' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/player/AntiAFK.java
+          grep -F 'case "auto-fish"' upstream/src/main/java/meteordevelopment/meteorclient/AnkVariantProfiles.java
+      - name: Compile full Fabric client
+        working-directory: upstream
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.13 clean build -x test
+      - name: Verify real compiled module variants
+        run: |
+          set -euo pipefail
+          JAR=$(find upstream/build/libs -maxdepth 1 -name 'AnkHack-Unified-*.jar' ! -name '*-sources.jar' ! -name '*-dev.jar' ! -name '*-javadoc.jar' | head -1)
+          test -s "$JAR"
+          # Baritone is an LGPL library, not a second hack client.
+          # A one-JAR installation may legitimately contain a replaceable library.
+          jar tf "$JAR" | grep -E 'META-INF/jars/.*baritone.*[.]jar'
+          BARITONE_LIB=$(jar tf "$JAR" | grep -E 'META-INF/jars/.*baritone.*[.]jar' | head -1)
+          unzip -p "$JAR" "$BARITONE_LIB" > /tmp/ankhack-baritone.jar
+          unzip -p /tmp/ankhack-baritone.jar fabric.mod.json | grep -F '1.21.11'
+          jar tf /tmp/ankhack-baritone.jar | grep -F 'baritone/api/BaritoneAPI.class'
+          unzip -p "$JAR" fabric.mod.json | grep -F '"id": "ankhack"'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.movement.Sprint$Mode' | grep -F 'LiquidOmni'
+          javap -classpath "$JAR" -p meteordevelopment.meteorclient.systems.modules.movement.Sprint | grep -F 'observeSprint()'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkAutoSwim.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkGlide.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/combat/AnkCombatRod.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkAutoSoup.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkToolSaver.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkNoServerSlot.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkViewLock.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/player/AnkAntiBadEffects.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkLevitationControl.class'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoReplenish$Strategy' | grep -F 'ThunderSwap'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoEat$Implementation' | grep -F 'ThunderFast'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoTool$Implementation' | grep -F 'ThunderSpeed'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/gui/screens/ModulesScreen.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/gui/themes/meteor/widgets/WMeteorModule.class'
+          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkJetpack.class'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.movement.FastClimb$Implementation' | grep -F 'WurstClassic'
+          # A class existing in a JAR is not enough: verify each module is registered once.
+          javap -c -p -classpath "$JAR" meteordevelopment.meteorclient.systems.modules.Modules > /tmp/ank_registry.txt
+          for symbol in AnkAutoSwim AnkGlide AnkCombatRod AnkAutoSoup AnkToolSaver AnkNoServerSlot AnkViewLock AnkAntiBadEffects AnkLevitationControl AnkJetpack; do
+            count=$(grep -c "$symbol" /tmp/ank_registry.txt)
+            if test "$count" -lt 1; then echo "Missing registered gameplay module: $symbol"; exit 1; fi
+          done
+          unzip -p "$JAR" fabric.mod.json | grep -F '"license": "GPL-3.0"'
+          test "$(jar tf "$JAR" | grep -c 'meteordevelopment/meteorclient/systems/modules/player/AutoReplenish.class')" -eq 1
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AutoFish$BiteMode' | grep -F 'WurstMotion'
+          javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.player.AntiAFK$Implementation' | grep -F 'ThunderTimed'
+          javap -classpath "$JAR" -p meteordevelopment.meteorclient.AnkVariantProfiles | grep -F 'choose('
+          test "$(jar tf "$JAR" | grep -c 'meteordevelopment/meteorclient/systems/modules/movement/Flight.class')" -eq 1
+          ! jar tf "$JAR" | grep -Eq 'META-INF/jars/.*(wurst|liquidbounce|thunderhack|meteor-client)'
+          cp "$JAR" AnkHack-Unified-1.0.13-Fabric-1.21.11.jar
+          cat > WHAT_IS_IMPLEMENTED.txt <<'EOF'
+          AnkHack 1.0.13
+          - Meteor original codebase and modules
+          - Wurst-based BoatFly and Flight variant
+          - Wurst-derived bobber motion option in AutoFish
+          - ThunderHack-based AutoLeave and AntiAFK idle mode
+          - LiquidBounce-derived Sprint modes: Legit and Omni
+          - AnkHack SmartMace, double-jump Flight, hashed per-server profiles
+          - Flight Auto switch based on server corrections
+          - AutoFish Auto based on observed fish in inventory (weak signal)
+          - Sprint Auto trials of Meteor/LiquidBounce variants using observed movement speed and corrections
+          - Native Wurst-derived AutoSwim, Glide
+          - LiquidBounce-inspired combat rod requiring manual aim; partial feature
+          - ThunderHack Reborn 1.21.11 source-derived AutoSoup, ToolSaver, NoServerSlot
+          - AutoReplenish: integrated ThunderSwap versus MeteorMerge under one Auto module
+          - AutoEat: MeteorSmart and ThunderFast native strategies with per-world Auto feedback
+          - AutoTool: MeteorScore and ThunderSpeed native strategies with per-world Auto feedback
+          - GUI: search-first, description search, category-window layout fix, left alignment
+          - GUI: dark gold widgets, larger readable rows, interactive ON/OFF indicators
+          - Wurst Jetpack integrated natively; FastClimb has MeteorModern/WurstClassic/Auto
+          - Baritone: genuine 1.21.11 LGPL navigation library integrated within the single installable JAR (separable internal mod library)
+          - ViewLock, AntiBadEffects, LevitationControl from original ThunderHack source
+          NOT IMPLEMENTED: all modules or all modes from the user-provided clients.
+          DEVELOPMENT BUILD ONLY: NOT A FINISHED CLIENT, NOT GAMEPLAY VERIFIED.
+          Regtest: all six native gameplay modules are instantiated once by AnkHack registry.
+          NO gameplay test has been performed in Minecraft.
+          EOF
+          tar --exclude=.git --exclude=.gradle --exclude=build -czf AnkHack-Unified-1.0.13-SOURCE.tar.gz -C upstream .
+          ls -lh AnkHack-Unified-1.0.13-Fabric-1.21.11.jar
+      - name: Attempt automated Minecraft GUI launch and screenshot
+        continue-on-error: true
+        timeout-minutes: 8
+        working-directory: upstream
+        run: |
+          set -u
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb xdotool imagemagick openbox libgl1-mesa-dri libglu1-mesa
+          Xvfb :98 -screen 0 1366x768x24 -nolisten tcp > ../xvfb.log 2>&1 &
+          DISPLAY=:98
+          export DISPLAY LIBGL_ALWAYS_SOFTWARE=1 MESA_GL_VERSION_OVERRIDE=3.3
+          openbox > ../openbox.log 2>&1 &
+          sleep 3
+          ./gradlew --no-daemon --console=plain -Pbuild_number=1.0.13 runClient > ../ankhack-client-smoke.log 2>&1 &
+          CLIENT_PID=$!
+          found=""
+          for i in $(seq 1 100); do
+            found=$(xdotool search --onlyvisible --name 'Minecraft|AnkHack|1.21.11' 2>/dev/null | head -1 || true)
+            if test -n "$found"; then break; fi
+            if ! kill -0 "$CLIENT_PID" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          # Always capture the virtual screen, even if window lookup fails.
+          xwininfo -root -tree > ../WINDOW_TREE.txt 2>&1 || true
+          if test -n "$found"; then
+            echo "Minecraft GUI window found: $found" | tee ../GUI_SMOKE_STATUS.txt
+            xdotool windowactivate --sync "$found" || true
+            sleep 4
+            xdotool key --clearmodifiers Shift_R || true
+            sleep 3
+          else
+            echo "Window not found by name. Need screenshot + render log inspection." | tee ../GUI_SMOKE_STATUS.txt
+          fi
+          import -window root ../AnkHack-GUI-virtual-display.png || true
+          identify ../AnkHack-GUI-virtual-display.png || true
+          grep -E 'Path Manager: Baritone' ../ankhack-client-smoke.log || true
+          kill "$CLIENT_PID" 2>/dev/null || true
+          sleep 2
+          # Screenshot presence alone does not count as a gameplay pass.
+          test -s ../AnkHack-GUI-virtual-display.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: AnkHack-1.0.13-GUI-SMOKE-DEBUG
+          path: |
+            AnkHack-GUI-virtual-display.png
+            ankhack-client-smoke.log
+            GUI_SMOKE_STATUS.txt
+            WINDOW_TREE.txt
+            xvfb.log
+            openbox.log
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnkHack-1.0.13-DEVELOPMENT-ONLY
+          path: |
+            AnkHack-Unified-1.0.13-Fabric-1.21.11.jar
+            WHAT_IS_IMPLEMENTED.txt
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnkHack-1.0.13-GPL-Source
+          path: AnkHack-Unified-1.0.13-SOURCE.tar.gz
+          if-no-files-found: error
