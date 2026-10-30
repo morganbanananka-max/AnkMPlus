@@ -29,6 +29,9 @@ edit("""            windows.add(createSearch(this));
             // The earlier two-row floating layout made later categories
             // unreachable below the bottom of the screen.
             if (getWindowHeight() <= theme.scale(560)) {
+                // Legacy profiles may contain dragged window positions
+                // from the old multi-column UI. Use distinct compact IDs.
+                windows.get(0).id = "ank-compact-search";
                 WWindow picker = theme.window("Categories");
                 picker.id = "ank-category-picker";
                 picker.padding = 0;
@@ -46,6 +49,10 @@ edit("""            windows.add(createSearch(this));
                     }
                     if (categoryModules.isEmpty()) continue;
                     WWindow categoryWindow = createCategory(this, category, categoryModules);
+                    categoryWindow.id = "ank-compact-" + category.name;
+                    // Expand the actual module list without clipping it on narrower screens.
+                    categoryWindow.minWidth = Math.max(180,
+                        (getWindowWidth() - theme.scale(355)) / theme.scale(1));
                     categoryWindow.view.maxHeight = Math.min(theme.scale(300), getWindowHeight() - theme.scale(120));
                     categoryWindow.visible = compactWindows.isEmpty();
                     compactWindows.add(categoryWindow);
