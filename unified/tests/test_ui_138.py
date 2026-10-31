@@ -32,6 +32,8 @@ class AnkGui138(unittest.TestCase):
         self.assertIn("protected void onRender(GuiRenderer renderer",backdrop)
         self.assertIn("renderer.quad(0,0,w,h,DIM)",backdrop)
         self.assertIn("renderer.text(\"ANKHACK\"",backdrop)
+        self.assertIn('renderer.text("ANKHACK",w-theme.scale(116),theme.scale(9),GOLD,false)',backdrop)
+        self.assertNotIn("MODULE CONTROL",backdrop)
         self.assertNotIn("DrawContext",screen)
         self.assertNotIn("ProcessBuilder",backdrop)
 
