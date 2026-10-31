@@ -27,6 +27,21 @@ class Adaptive137Tests(unittest.TestCase):
         self.assertIn("default -> new String[0];",profile)
         self.assertIn('if(server==null || "unknown".equals(server))return available[0];',profile)
 
+    def test_profiles_reset_after_switching_worlds(self):
+        cases={
+            "movement/Sprint.java":("!connected.equals(profileServer)","validTicks=0;trialCount=0"),
+            "player/AutoGap.java":("!connected.equals(server)","previousApples=-1;recentEatingTicks=0"),
+            "combat/BowSpam.java":("!connected.equals(server)","pendingAmmo=-1;pendingTicks=0"),
+        }
+        for path,conditions in cases.items():
+            source=(ROOT/"systems/modules"/path).read_text()
+            with self.subTest(module=path):
+                self.assertIn("AnkVariantProfiles.serverKey(mc)",source)
+                for text in conditions:
+                    self.assertIn(text,source)
+                self.assertIn('AnkVariantProfiles.choose(',source)
+                self.assertIn('mc.world==null',source)
+
     def test_real_thunder_tape_is_a_mode_not_an_extra_client(self):
         registry=(ROOT/"systems/modules/Modules.java").read_text()
         self.assertEqual(1,registry.count("add(new AutoClicker());"))
