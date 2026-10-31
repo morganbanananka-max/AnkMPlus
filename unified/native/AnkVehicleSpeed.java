@@ -91,7 +91,7 @@ public final class AnkVehicleSpeed extends Module {
         if (pauseTicks>0) { pauseTicks--; return; }
         if (mc.currentScreen!=null || mc.player.isSpectator()
             || Modules.get().isActive(Flight.class)
-            || Modules.get().isActive(BoatFly.class)) return;
+            || Modules.get().isActive(AnkBoatFly.class)) return;
 
         Entity vehicle=mc.player.getControllingVehicle();
         if (vehicle==null || mc.player.isSneaking() || vehicle.isRemoved()) return;
