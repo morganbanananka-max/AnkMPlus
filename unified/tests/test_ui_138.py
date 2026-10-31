@@ -47,6 +47,16 @@ class AnkGui138(unittest.TestCase):
                          "w.view.hasScrollBar = true;",
                          'theme.textBox("", "Search modules")']:
             self.assertIn(expected,screen)
+    def test_ank_ui_is_shared_across_fullscreen_and_windowed(self):
+        screen=(SRC/"gui/screens/ModulesScreen.java").read_text()
+        self.assertIn("private boolean useAnkLayout() { return true; }",screen)
+        self.assertIn("if (useAnkLayout()) {",screen)
+        self.assertIn("if (useAnkLayout()) return;",screen)
+        self.assertIn("Math.min(760, Math.max(180",screen)
+        self.assertIn("Math.min(theme.scale(720),getWindowHeight()-theme.scale(138))",screen)
+        self.assertIn("double combined=pad;",screen)
+        self.assertIn("x = Math.max(pad,(getWindowWidth()-combined)/2.0);",screen)
+
     def test_toggle_and_settings_still_function(self):
         row=(SRC/"gui/themes/meteor/widgets/WMeteorModule.java").read_text()
         self.assertIn("if (button == GLFW_MOUSE_BUTTON_LEFT) module.toggle();",row)
