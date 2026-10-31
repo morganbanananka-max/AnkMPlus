@@ -37,10 +37,11 @@ public final class AnkMenuBackdrop extends WWidget {
         renderer.quad(left,top+theme.scale(2),theme.scale(2),h-top-bottom,BORDER);
         renderer.quad(left,h-theme.scale(27),w-left*2,theme.scale(19),FOOTER);
         renderer.quad(left,h-theme.scale(27),w-left*2,theme.scale(1),BORDER);
-        renderer.text("ANKHACK",theme.scale(19),theme.scale(41),GOLD,false);
-        renderer.text("MODULE CONTROL",theme.scale(105),theme.scale(41),TEXT,false);
+        // Brand in the unused right side of the global top tab strip.
+        // Never paint title text on top of Search or category window headers.
+        if(w>theme.scale(790))
+            renderer.text("ANKHACK",w-theme.scale(116),theme.scale(9),GOLD,false);
         if(w>theme.scale(610)) {
-            renderer.text("FABRIC 1.21.11",w-theme.scale(121),theme.scale(41),TEXT,false);
             renderer.text("LEFT CLICK  Toggle     RIGHT CLICK  Settings     SCROLL  More modules",
                 theme.scale(19),h-theme.scale(23),TEXT,false);
         } else {
