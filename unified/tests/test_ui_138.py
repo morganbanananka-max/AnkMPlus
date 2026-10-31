@@ -21,17 +21,20 @@ class AnkGui138(unittest.TestCase):
         self.assertIn("categoryWindow.visible = true",screen)
         self.assertIn("for (WWindow window : compactWindows) window.visible = false",screen)
         self.assertIn("invalidate();",screen)
-    def test_visual_frame_is_real_draw_code(self):
+    def test_backdrop_renders_before_controls_in_same_layer(self):
         screen=(SRC/"gui/screens/ModulesScreen.java").read_text()
-        for expected in ["protected void onRenderBefore(DrawContext context, float delta)",
-                        "context.fill(0,0,width,height,0xC307090D)",
-                        "context.drawText(client.textRenderer",
-                        '"ANKHACK"',
-                        '"MODULE CONTROL"',
-                        "context.fill(8,height-27,width-8,height-8,0xFF171A20)"]:
-            self.assertIn(expected,screen)
-        self.assertNotIn("ImageIO",screen)
-        self.assertNotIn("ProcessBuilder",screen)
+        backdrop=(SRC/"gui/screens/AnkMenuBackdrop.java").read_text()
+        self.assertIn("add(new AnkMenuBackdrop()).widget();",screen)
+        self.assertLess(screen.index("add(new AnkMenuBackdrop()).widget();"),
+                        screen.index("controller = add(new WCategoryController())"))
+        self.assertNotIn("onRenderBefore(",screen)
+        self.assertIn("extends WWidget",backdrop)
+        self.assertIn("protected void onRender(GuiRenderer renderer",backdrop)
+        self.assertIn("renderer.quad(0,0,w,h,DIM)",backdrop)
+        self.assertIn("renderer.text(\"ANKHACK\"",backdrop)
+        self.assertNotIn("DrawContext",screen)
+        self.assertNotIn("ProcessBuilder",backdrop)
+
     def test_controls_scroll_and_old_config_isolated(self):
         screen=(SRC/"gui/screens/ModulesScreen.java").read_text()
         for expected in ['"ank-category-picker-v2"',
