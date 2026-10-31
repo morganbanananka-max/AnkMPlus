@@ -107,7 +107,7 @@ jobs:
           unzip -p "$JAR" fabric.mod.json | grep -F '"name": "AnkHack"'
           unzip -p "$JAR" fabric.mod.json | grep -F '"meteor-client:color": "255,201,55"'
           ! unzip -p "$JAR" fabric.mod.json | grep -qF 'https://meteorclient.com/discord'
-          grep -F 'theme.window("AnkHack")' upstream/src/main/java/meteordevelopment/meteorclient/gui/screens/ModulesScreen.java
+          grep -F 'theme.window("ANKHACK")' upstream/src/main/java/meteordevelopment/meteorclient/gui/screens/ModulesScreen.java
           grep -F 'world-time-stall-warnings' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/misc/AnkServerDiagnostics.java
           grep -F 'PlayerListEntry' upstream/src/main/java/meteordevelopment/meteorclient/systems/modules/misc/AnkServerDiagnostics.java
           javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.movement.Sprint$Mode' | grep -F 'LiquidOmni'
