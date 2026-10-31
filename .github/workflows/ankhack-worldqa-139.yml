@@ -435,8 +435,8 @@ jobs:
           DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool key --clearmodifiers Escape || true
           sleep 3
           DISPLAY="$target" XAUTHORITY="$xauth_file" import -window "$WINDOW_ID" ../AnkHack-worldqa-title.png || true
-          # Vanilla 1.21.11 TitleScreen Singleplayer is centered around 38% of window height.
-          DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool mousemove --sync --window "$found" "$((WIDTH/2))" "$((HEIGHT*38/100))" || true
+          # Vanilla 1.21.11 TitleScreen Singleplayer centered around 49% of the window at 854x480.
+          DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool mousemove --sync --window "$found" "$((WIDTH/2))" "$((HEIGHT*49/100))" || true
           DISPLAY="$target" XAUTHORITY="$xauth_file" xdotool click 1 || true
           sleep 4
           DISPLAY="$target" XAUTHORITY="$xauth_file" import -window "$WINDOW_ID" ../AnkHack-worldqa-worldlist.png || true
