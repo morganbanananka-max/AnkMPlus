@@ -464,6 +464,21 @@ jobs:
             exit 1
           fi
           test -s ../AnkHack-worldqa-result.png
+          # World-ready fires before the loading-terrain screen finishes.
+          # Observe actual rendering and continued JVM health for 20 seconds.
+          sleep 20
+          if grep -qF 'Game crashed!' ../ankhack-client-smoke.log; then
+            echo "FAIL: client crashed after joining the world" | tee ../ANKHACK_WORLDQA_STATUS.txt
+            exit 1
+          fi
+          if ! kill -0 "$CLIENT_PID" 2>/dev/null; then
+            echo "FAIL: game process terminated after joining the world" | tee ../ANKHACK_WORLDQA_STATUS.txt
+            exit 1
+          fi
+          DISPLAY="$target" XAUTHORITY="$xauth_file" import -window "$WINDOW_ID" ../AnkHack-worldqa-inworld.png
+          test -s ../AnkHack-worldqa-inworld.png
+          test "$(identify -format '%k' ../AnkHack-worldqa-inworld.png)" -gt 16
+          echo "PASS: still rendered and running after 20 additional world ticks/seconds" | tee -a ../ANKHACK_WORLDQA_STATUS.txt
           kill "$CLIENT_PID" 2>/dev/null || true
           # Passing this test means only GUI startup, not gameplay compatibility.
       - uses: actions/upload-artifact@v4
@@ -479,6 +494,7 @@ jobs:
             AnkHack-worldqa-worldlist.png
             AnkHack-worldqa-create.png
             AnkHack-worldqa-result.png
+            AnkHack-worldqa-inworld.png
             ANKHACK_WORLDQA_STATUS.txt
             ankhack-client-smoke.log
             GUI_SMOKE_STATUS.txt
