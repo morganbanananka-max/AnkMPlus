@@ -114,6 +114,11 @@ change('''                return;
                 return;
             }
             for (Category category : Modules.loopCategories()) {''')
+change('''                        categoryWindow.visible = true;
+                        invalidate();''',
+'''                        categoryWindow.visible = true;
+                        System.out.println("[AnkHack] Category selected: " + category.name);
+                        invalidate();''')
 screen.write_text(source,encoding="utf-8")
 src=Path("unified/native/AnkCategoryNavButton.java")
 dst=base/"gui/screens/AnkCategoryNavButton.java"
