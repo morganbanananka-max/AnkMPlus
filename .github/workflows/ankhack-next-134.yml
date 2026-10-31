@@ -219,8 +219,8 @@ jobs:
           test -s "$JAR"
           jar tf "$JAR" > /tmp/ankhack-134-jar-contents.txt
           grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkNoJumpDelay.class' /tmp/ankhack-134-jar-contents.txt
-          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/combat/AnkPerfectRelease.class' /tmp/ankhack-134-jar-contents.txt
-          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkWaterSpeed.class' /tmp/ankhack-134-jar-contents.txt
+          grep -F 'meteordevelopment/meteorclient/systems/modules/combat/AnkPerfectRelease.class' /tmp/ankhack-134-jar-contents.txt
+          grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkWaterSpeed.class' /tmp/ankhack-134-jar-contents.txt
       - name: Verify compiled native vehicle and Parkour variants
         working-directory: upstream
         run: |
@@ -231,7 +231,7 @@ jobs:
           test -s "$JAR"
           jar tf "$JAR" > /tmp/ankhack-134-jar-contents.txt
           grep -F 'meteordevelopment/meteorclient/systems/modules/movement/AnkVehicleSpeed.class' /tmp/ankhack-134-jar-contents.txt
-          jar tf "$JAR" | grep -F 'meteordevelopment/meteorclient/systems/modules/movement/Parkour$Implementation.class' /tmp/ankhack-134-jar-contents.txt
+          grep -F 'meteordevelopment/meteorclient/systems/modules/movement/Parkour$Implementation.class' /tmp/ankhack-134-jar-contents.txt
           javap -classpath "$JAR" -p meteordevelopment.meteorclient.systems.modules.combat.AnkPerfectRelease | grep -F 'crossbowTicks'
           javap -classpath "$JAR" 'meteordevelopment.meteorclient.systems.modules.movement.Parkour$Implementation' | grep -F 'ThunderTimed'
       - name: Verify actual game launch and capture non-empty GUI
