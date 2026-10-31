@@ -61,6 +61,7 @@ jobs:
           python3 unified/patch_combined_136.py
           python3 unified/patch_adaptive_137.py
           python3 unified/patch_tapemouse_137.py
+          python3 unified/patch_session_isolation_137.py
           python3 -m unittest discover -v -s unified/tests -p 'test_adaptive_137.py'
           mkdir -p /tmp/ankhack137-tests
           javac -d /tmp/ankhack137-tests unified/native/AnkVariantDecision.java unified/testsrc/AnkVariantDecisionTest.java
