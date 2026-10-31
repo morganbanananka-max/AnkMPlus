@@ -159,7 +159,11 @@ once(modules,
         }
     }''',
 '''    private void onGameLeft(GameLeftEvent event) {
+        // If the world was never fully ready, modules were never activated.
+        // In that case do not invoke their onDeactivate() on a missing player.
+        boolean wasPending=pendingWorldActivation;
         pendingWorldActivation=false;
+        if(wasPending) return;
         synchronized (active) {
             for (Module module : getAll()) {
                 if (!module.isActive() || module.runInMainMenu) continue;
