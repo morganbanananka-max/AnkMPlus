@@ -23,7 +23,7 @@ class Ui135Tests(unittest.TestCase):
         s=(ROOT/"gui/screens/ModulesScreen.java").read_text()
         self.assertIn('theme.window("ANKHACK")',s)
         self.assertIn("category.name.toUpperCase(Locale.ROOT)",s)
-        self.assertIn('picker.id = "ank-category-picker"',s)
+        self.assertIn('picker.id = "ank-category-picker-v2"',s)
         self.assertIn("button.action = () ->",s)
         self.assertIn("categoryWindow.visible = true",s)
     def test_actual_gold_header_uses_existing_renderer(self):
